@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maydaylabs-api
+  namespace: maydaylabs-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: maydaylabs-api
+  template:
+    metadata:
+      labels:
+        app: maydaylabs-api
+    spec:
+      serviceAccountName: maydaylabs-backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: ${REGISTRY}/maydaylabs-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: K8SQUEST_REDIS_URL
+              value: "redis://redis:6379/0"
+            - name: K8SQUEST_ENGINE_IMAGE
+              value: "${REGISTRY}/maydaylabs-engine:latest"
+            - name: K8SQUEST_SHELL_IMAGE
+              value: "${REGISTRY}/maydaylabs-shell:latest"
+            - name: K8SQUEST_WORLDS_PATH
+              value: "/app/worlds"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maydaylabs-api
+  namespace: maydaylabs-system
+spec:
+  selector:
+    app: maydaylabs-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

@@ -1,0 +1,44 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: webapp/images/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      K8SQUEST_REDIS_URL: redis://redis:6379/0
+      K8SQUEST_ENGINE_IMAGE: maydaylabs-engine:latest
+      K8SQUEST_SHELL_IMAGE: maydaylabs-shell:latest
+      K8SQUEST_KUBE_CONTEXT: kind-k8squest
+      KUBECONFIG: /home/k8squest/.kube/kind-k8squest-internal.yaml
+    volumes:
+      - /home/andre/.kube/kind-k8squest-internal.yaml:/home/k8squest/.kube/kind-k8squest-internal.yaml:ro
+    networks:
+      - default
+      - kind
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: webapp/images/frontend/Dockerfile
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./webapp/nginx-local.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  kind:
+    external: true

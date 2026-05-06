@@ -1,0 +1,61 @@
+---
+# HTTPS: /api and /ws route to the FastAPI backend; everything else to the Next.js frontend.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: maydaylabs
+  namespace: maydaylabs-system
+spec:
+  parentRefs:
+  - name: global-gateway
+    namespace: nginx-gateway
+    sectionName: maydaylabs
+  hostnames:
+  - maydaylabs.dremer10.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    - path:
+        type: PathPrefix
+        value: /ws
+    - path:
+        type: PathPrefix
+        value: /shell
+    backendRefs:
+    - name: maydaylabs-api
+      port: 8000
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: maydaylabs-frontend
+      port: 3000
+---
+# HTTP → HTTPS redirect. cert-manager attaches its own Exact-match HTTPRoute to
+# the same acme-http listener for ACME challenges; Gateway API path specificity
+# (Exact beats PathPrefix) ensures challenges are served before the redirect fires.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: maydaylabs-http-redirect
+  namespace: maydaylabs-system
+spec:
+  parentRefs:
+  - name: global-gateway
+    namespace: nginx-gateway
+    sectionName: acme-http
+  hostnames:
+  - maydaylabs.dremer10.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

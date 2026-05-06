@@ -1,0 +1,15 @@
+---
+# Certificate must live in nginx-gateway — the same namespace as global-gateway —
+# so the gateway can reference the resulting TLS secret directly.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: maydaylabs-cert
+  namespace: nginx-gateway
+spec:
+  secretName: maydaylabs-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-maydaylabs
+  dnsNames:
+  - maydaylabs.dremer10.com

@@ -1,0 +1,9 @@
+🔍 Observation Hint:
+
+Check the pod status: `kubectl get pod database-app -n k8squest`
+
+Look at the RESTARTS column. Is it restarting repeatedly?
+
+Now check the logs: `kubectl logs database-app -n k8squest`
+
+What error do you see?

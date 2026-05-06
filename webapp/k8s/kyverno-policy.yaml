@@ -1,0 +1,118 @@
+---
+# Policy 1: The maydaylabs-backend SA may only create/delete namespaces
+# whose names start with "maydaylabs-". This is an admission-level enforcement
+# on top of the application-level guard in session.py.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: maydaylabs-namespace-confinement
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: restrict-namespace-create
+      match:
+        any:
+          - resources:
+              kinds: ["Namespace"]
+              operations: ["CREATE"]
+            subjects:
+              - kind: ServiceAccount
+                name: maydaylabs-backend
+                namespace: maydaylabs-system
+      validate:
+        message: "maydaylabs-backend may only create namespaces prefixed with 'maydaylabs-'"
+        pattern:
+          metadata:
+            name: "maydaylabs-*"
+
+    - name: restrict-namespace-delete
+      match:
+        any:
+          - resources:
+              kinds: ["Namespace"]
+              operations: ["DELETE", "UPDATE"]
+            subjects:
+              - kind: ServiceAccount
+                name: maydaylabs-backend
+                namespace: maydaylabs-system
+      validate:
+        message: "maydaylabs-backend may only delete/update namespaces prefixed with 'maydaylabs-'"
+        pattern:
+          metadata:
+            name: "maydaylabs-*"
+---
+# Policy 2: All pods created in maydaylabs-* session namespaces must run as
+# non-root with privilege escalation disabled. This is an admission-level backstop
+# on top of the pod specs set in session.py.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: maydaylabs-pod-security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-non-root
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["maydaylabs-system"]
+      validate:
+        message: "All pods in maydaylabs-system must run as non-root"
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+
+    - name: deny-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["maydaylabs-system"]
+      validate:
+        message: "Privilege escalation is not allowed in maydaylabs-system"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+---
+# Policy 3: Prevent any ServiceAccount from maydaylabs-system from modifying
+# resources in namespaces outside the maydaylabs-* prefix. This catches any
+# future code paths that attempt to reach outside the session boundary.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: maydaylabs-cross-namespace-block
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: block-non-maydaylabs-resource-writes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - Service
+                - ConfigMap
+                - Secret
+                - ServiceAccount
+                - Role
+                - RoleBinding
+              operations: ["CREATE", "UPDATE", "DELETE"]
+            subjects:
+              - kind: ServiceAccount
+                name: "*"
+                namespace: maydaylabs-system
+      exclude:
+        any:
+          - resources:
+              namespaces: ["maydaylabs-*", "maydaylabs-system"]
+      validate:
+        message: "ServiceAccounts in maydaylabs-system may only manage resources in maydaylabs-* namespaces"
+        deny: {}

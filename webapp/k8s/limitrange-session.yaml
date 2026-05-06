@@ -1,0 +1,23 @@
+# Template: applied per session namespace.
+# Ensures every container has sensible defaults so level resources
+# that don't specify requests/limits still get capped.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: maydaylabs-limits
+  namespace: SESSION_NS
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "200m"
+        memory: "192Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+      max:
+        cpu: "500m"
+        memory: "512Mi"
+    - type: PersistentVolumeClaim
+      max:
+        storage: "1Gi"

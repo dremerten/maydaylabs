@@ -1,0 +1,29 @@
+# K8sQuest shell — nautical Kubernetes terminal
+export TERM=xterm-256color
+[ -f /tmp/kubeconfig ] && export KUBECONFIG=/tmp/kubeconfig
+export HISTFILE=/tmp/.bash_history
+export HISTSIZE=1000
+export HISTCONTROL=ignoredups:erasedups
+
+# ⎈ is the Kubernetes helm/wheel symbol
+PS1='\[\e[0;36m\]⎈\[\e[0m\] \[\e[1;34m\]${KUBECTL_NAMESPACE:-default}\[\e[0m\] \[\e[0;32m\]\w\[\e[0m\]\n\[\e[0;37m\]\$ \[\e[0m\]'
+
+# kubectl shortcuts
+alias k=kubectl
+alias kgp='kubectl get pods -o wide'
+alias kgs='kubectl get services'
+alias kgd='kubectl get deployments'
+alias kge='kubectl get events --sort-by=.lastTimestamp'
+alias kl='kubectl logs'
+alias kd='kubectl describe'
+alias ke='kubectl exec -it'
+
+# Switch namespace and update prompt
+kns() {
+    if [ -n "$1" ]; then
+        kubectl config set-context --current --namespace="$1" 2>/dev/null
+        export KUBECTL_NAMESPACE="$1"
+    else
+        kubectl config view --minify --output 'jsonpath={..namespace}' 2>/dev/null
+    fi
+}

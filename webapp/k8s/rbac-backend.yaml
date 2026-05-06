@@ -1,0 +1,117 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maydaylabs-backend
+  namespace: maydaylabs-system
+---
+# ClusterRole A: cluster-scoped operations only.
+# Namespace CRUD (enforced to maydaylabs-* by application logic + Kyverno),
+# read-only node/storageclass access, and RBAC management for per-session bindings.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maydaylabs-backend-cluster
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  # Needed to create per-session ClusterRoleBindings for the engine SA
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Needed to bootstrap the per-session RoleBinding before any exists in the namespace
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # 'bind' on these ClusterRoles bypasses RBAC escalation prevention when creating
+  # per-session bindings — the SA can reference roles with more permissions than it
+  # holds globally.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["bind"]
+    resourceNames: ["maydaylabs-backend-session", "maydaylabs-engine", "maydaylabs-player-viewer"]
+  # PersistentVolumes are cluster-scoped — cannot be granted via namespaced RoleBinding
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: maydaylabs-backend-cluster
+subjects:
+  - kind: ServiceAccount
+    name: maydaylabs-backend
+    namespace: maydaylabs-system
+roleRef:
+  kind: ClusterRole
+  name: maydaylabs-backend-cluster
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole B: namespace-scoped resource management.
+# Bound via RoleBinding into each maydaylabs-* namespace dynamically by session.py.
+# Using ClusterRole + RoleBinding (not ClusterRoleBinding) confines access to the
+# specific namespace where the RoleBinding lives — no cluster-wide resource access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maydaylabs-backend-session
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/exec
+      - pods/log
+      - pods/status
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - events
+      - serviceaccounts
+      - resourcequotas
+      - limitranges
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# ClusterRole: read-only cluster-wide access for player shell pods.
+# Bound per-session via ClusterRoleBinding by session.py, cleaned up on delete.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maydaylabs-player-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]

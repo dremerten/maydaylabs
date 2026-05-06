@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #050f1a;
+  --surface: #0a1f35;
+  --border: #163355;
+  --cyan: #0096c7;
+  --violet: #2ec4b6;
+  --green: #06d6a0;
+  --red: #ef4444;
+  --text: #caf0f8;
+  --muted: #4a7a9b;
+  --fg: #f0f9ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Sonar grid — subtle ocean depth grid that drifts like a current */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 150, 199, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 150, 199, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridMove 30s linear infinite;
+}
+
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+/* Glassmorphism panel — deep navy tint */
+.glass {
+  background: rgba(10, 31, 53, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 150, 199, 0.12);
+}
+
+.glass-violet {
+  background: rgba(10, 31, 53, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(46, 196, 182, 0.12);
+}
+
+/* Neon glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 150, 199, 0.25), 0 0 60px rgba(0, 150, 199, 0.08);
+}
+
+.glow-violet {
+  box-shadow: 0 0 20px rgba(46, 196, 182, 0.25), 0 0 60px rgba(46, 196, 182, 0.08);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(6, 214, 160, 0.25);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 150, 199, 0.9), 0 0 30px rgba(0, 150, 199, 0.5);
+}
+
+.text-glow-violet {
+  text-shadow: 0 0 10px rgba(46, 196, 182, 0.9), 0 0 30px rgba(46, 196, 182, 0.5);
+}
+
+/* Gradient border */
+.border-gradient-cyan {
+  position: relative;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.border-gradient-cyan::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #0096c740, #2ec4b620);
+  z-index: -1;
+}
+
+/* xterm.js container */
+.xterm-container {
+  width: 100%;
+  height: 100%;
+}
+
+.xterm-container .xterm {
+  padding: 12px;
+  height: 100%;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Difficulty badge colours */
+.badge-beginner      { color: #06d6a0; border-color: #06d6a040; }
+.badge-intermediate  { color: #0096c7; border-color: #0096c740; }
+.badge-advanced      { color: #2ec4b6; border-color: #2ec4b640; }
+.badge-expert        { color: #ef4444; border-color: #ef444440; }

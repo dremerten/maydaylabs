@@ -1,0 +1,15 @@
+# Template: applied per session namespace by the backend (session.py).
+# Caps resources to prevent a single session from consuming the node.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: maydaylabs-quota
+  namespace: SESSION_NS
+spec:
+  hard:
+    pods: "4"                   # engine + shell + ~2 broken level resources
+    requests.cpu: "500m"
+    requests.memory: "512Mi"
+    limits.cpu: "1000m"
+    limits.memory: "1Gi"
+    persistentvolumeclaims: "2" # for storage world levels

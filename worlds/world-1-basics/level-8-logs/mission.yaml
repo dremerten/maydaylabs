@@ -1,0 +1,11 @@
+name: "Pod Logs Mystery"
+description: "Pod is running but the application isn't working. The problem is only visible in logs"
+objective: "Find and fix the configuration issue causing the application to fail silently"
+xp: 150
+difficulty: beginner
+expected_time: 12m
+concepts:
+  - kubectl logs
+  - Application debugging
+  - Environment variables
+  - Container troubleshooting

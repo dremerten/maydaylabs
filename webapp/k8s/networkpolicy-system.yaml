@@ -1,0 +1,39 @@
+---
+# Lock down the maydaylabs-system namespace.
+# Allow: ingress from nginx-gateway (nginx gateway fabric data plane)
+# Allow: pods to reach Redis within the same namespace
+# Allow: pods to reach the k3s API server (for k8s client calls)
+# Deny: everything else inbound
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: maydaylabs-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow ingress from nginx-gateway (nginx gateway fabric data plane)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nginx-gateway
+    # Allow intra-namespace (backend ↔ Redis, backend ↔ frontend)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: maydaylabs-system
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-apiserver
+  namespace: maydaylabs-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow all egress (k8s API calls, external image pulls, DNS)
+    - {}

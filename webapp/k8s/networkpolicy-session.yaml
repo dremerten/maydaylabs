@@ -1,0 +1,43 @@
+# Template: applied to each session namespace at creation time by the backend.
+# Substitue SESSION_NS with the actual namespace (e.g. k8squest-a1b2c3d4).
+#
+# Rules:
+#   Allow pod↔pod within this namespace       (service→pod scenarios in levels)
+#   Allow egress to kube-dns port 53           (DNS resolution inside pods)
+#   Allow egress to k3s API server             (kubectl commands from shell pod)
+#   Deny all ingress from other namespaces
+#   Deny all egress to other k8squest-* namespaces
+#   Deny all egress to maydaylabs-system
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-session
+  namespace: SESSION_NS
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow intra-namespace only
+    - from:
+        - podSelector: {}
+  egress:
+    # Allow intra-namespace
+    - to:
+        - podSelector: {}
+    # Allow DNS (kube-dns)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow egress to k3s API server (port 6443)
+    - ports:
+        - protocol: TCP
+          port: 6443
