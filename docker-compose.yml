@@ -10,15 +10,12 @@ services:
     restart: unless-stopped
     environment:
       K8SQUEST_REDIS_URL: redis://redis:6379/0
-      K8SQUEST_ENGINE_IMAGE: maydaylabs-engine:latest
-      K8SQUEST_SHELL_IMAGE: maydaylabs-shell:latest
-      K8SQUEST_KUBE_CONTEXT: kind-k8squest
-      KUBECONFIG: /home/k8squest/.kube/kind-k8squest-internal.yaml
+      K8SQUEST_ENGINE_IMAGE: docker.io/dremer10/maydaylabs-engine:latest
+      K8SQUEST_SHELL_IMAGE: docker.io/dremer10/maydaylabs-shell:latest
+      K8SQUEST_KUBE_CONTEXT: k3s-k8squest
+      KUBECONFIG: /home/k8squest/.kube/config
     volumes:
-      - /home/andre/.kube/kind-k8squest-internal.yaml:/home/k8squest/.kube/kind-k8squest-internal.yaml:ro
-    networks:
-      - default
-      - kind
+      - ${HOME}/.kube/config:/home/k8squest/.kube/config:ro
     depends_on:
       - redis
 
@@ -38,7 +35,3 @@ services:
     depends_on:
       - backend
       - frontend
-
-networks:
-  kind:
-    external: true

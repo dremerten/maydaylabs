@@ -33,6 +33,10 @@ function TerminalView() {
   const handleDisconnect = useCallback(() => setEnded(true), []);
 
   const isEngine = type === "engine";
+
+  useEffect(() => {
+    document.title = isEngine ? "Mission Control — K8sQuest" : "Helm Station — K8sQuest";
+  }, [isEngine]);
   const accentColor = isEngine ? "cyan" : "teal";
   const accentHex = isEngine ? "#0096c7" : "#2ec4b6";
   const label = isEngine ? "⎈ Mission Control" : "⚓ Helm Station";

@@ -127,3 +127,80 @@ body {
 .badge-intermediate  { color: #0096c7; border-color: #0096c740; }
 .badge-advanced      { color: #2ec4b6; border-color: #2ec4b640; }
 .badge-expert        { color: #ef4444; border-color: #ef444440; }
+
+/* ─── Homepage animations ───────────────────────────────────────── */
+
+/* New Journey — red alarm pulse */
+@keyframes alarmPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(239,68,68,0.4), 0 0 24px rgba(239,68,68,0.15);
+    border-color: rgba(239,68,68,0.7);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(239,68,68,0.85), 0 0 55px rgba(239,68,68,0.35), 0 0 90px rgba(239,68,68,0.12);
+    border-color: rgba(239,68,68,1);
+  }
+}
+.alarm-pulse {
+  animation: alarmPulse 1.4s ease-in-out infinite;
+}
+
+/* Resume Journey — white halo sparkle */
+@keyframes haloGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(255,255,255,0.12), 0 0 20px rgba(255,255,255,0.06);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(255,255,255,0.35), 0 0 45px rgba(255,255,255,0.15), 0 0 80px rgba(255,255,255,0.06);
+  }
+}
+@keyframes sparkleFloat {
+  0%   { opacity: 0; transform: translate(0px, 0px) scale(0.6); }
+  40%  { opacity: 1; transform: translate(-4px, -8px) scale(1); }
+  100% { opacity: 0; transform: translate(-2px, -16px) scale(0.5); }
+}
+.halo-glow {
+  animation: haloGlow 2.2s ease-in-out infinite;
+}
+.sparkle-1, .sparkle-2, .sparkle-3 {
+  position: absolute;
+  pointer-events: none;
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255,255,255,0.75);
+  animation: sparkleFloat 2.4s ease-in-out infinite;
+}
+.sparkle-2 { animation-delay: 0.8s; }
+.sparkle-3 { animation-delay: 1.6s; }
+
+/* "Learn by Doing" — neon flicker */
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow:
+      0 0 4px #0096c7,
+      0 0 12px #0096c7,
+      0 0 28px #0096c7,
+      0 0 60px #0096c740;
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+    opacity: 0.55;
+  }
+}
+.neon-flicker {
+  animation: neonFlicker 5s linear infinite;
+  color: #0096c7;
+}
+
+/* Maydaylabs image — heartbeat */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14%       { transform: scale(1.015); }
+  28%       { transform: scale(1); }
+  42%       { transform: scale(1.01); }
+  56%       { transform: scale(1); }
+}
+.heartbeat {
+  animation: heartbeat 3s ease-in-out infinite;
+}

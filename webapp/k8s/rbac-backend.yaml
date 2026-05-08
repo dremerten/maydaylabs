@@ -98,8 +98,12 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
 ---
-# ClusterRole: read-only cluster-wide access for player shell pods.
+# ClusterRole: cluster-wide access for player shell pods.
+# Read-only for most resources; create/delete on priorityclasses required for levels 49+50.
 # Bound per-session via ClusterRoleBinding by session.py, cleaned up on delete.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -107,11 +111,14 @@ metadata:
   name: maydaylabs-player-viewer
 rules:
   - apiGroups: [""]
-    resources: ["nodes", "namespaces"]
+    resources: ["namespaces"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["storageclasses", "persistentvolumes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["metrics.k8s.io"]
-    resources: ["nodes", "pods"]
+    resources: ["pods"]
     verbs: ["get", "list"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
