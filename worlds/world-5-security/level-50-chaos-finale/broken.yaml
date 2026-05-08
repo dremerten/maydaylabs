@@ -1,14 +1,3 @@
-# BROKEN: The Perfect Storm - EVERYTHING is broken!
-# Multiple simultaneous failures across all World 5 concepts
-
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: k8squest
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-
----
 # ResourceQuota - very restrictive
 apiVersion: v1
 kind: ResourceQuota
@@ -17,7 +6,7 @@ metadata:
   namespace: k8squest
 spec:
   hard:
-    requests.cpu: "1"  # ❌ Too low!
+    requests.cpu: "2"  # ❌ Still restrictive — leaves little room for chaos-app to scale!
     requests.memory: "1Gi"
     pods: "5"
 
@@ -39,9 +28,11 @@ metadata:
   name: deny-all
   namespace: k8squest
 spec:
-  podSelector: {}
+  podSelector:
+    matchLabels:
+      app: chaos  # ❌ chaos-app has no allow rules = blocked!
   policyTypes: [Ingress, Egress]
-  # ❌ No rules = block everything!
+  # ❌ No rules = block everything for chaos-app!
 
 ---
 # Deployment with EVERY problem
@@ -69,8 +60,11 @@ spec:
         image: nginx:latest
         resources:
           requests:
-            cpu: "1"  # ❌ Too high for quota!
-            memory: "512Mi"
+            cpu: "300m"  # 3 pods × 300m = 900m; plus engine/shell overhead = ~1050m total
+            memory: "256Mi"
+          limits:
+            cpu: "400m"
+            memory: "384Mi"
         securityContext:
           runAsUser: 0  # ❌ Root!
           allowPrivilegeEscalation: true  # ❌ Escalation allowed!

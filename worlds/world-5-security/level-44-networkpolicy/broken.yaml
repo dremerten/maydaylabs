@@ -1,13 +1,3 @@
-# BROKEN: NetworkPolicy blocks all traffic
-# Problem: Too restrictive - blocks legitimate communication
-# Result: Pods can't communicate with each other
-
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: k8squest
-
----
 # Database pod
 apiVersion: v1
 kind: Pod

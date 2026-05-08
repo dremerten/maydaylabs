@@ -7,5 +7,7 @@ This means the pod is requesting more resources than any node in your cluster ca
 Check what resources the pod is requesting:
 `kubectl get pod hungry-app -n k8squest -o yaml | grep -A 4 resources:`
 
-Compare this to available node capacity:
-`kubectl describe nodes | grep -A 5 Allocatable`
+The fix is to edit the pod with reasonable requests — something like 64Mi memory and 100m CPU.
+Since pods are largely immutable, delete and recreate it:
+`kubectl delete pod hungry-app -n k8squest`
+Then apply a fixed manifest.
