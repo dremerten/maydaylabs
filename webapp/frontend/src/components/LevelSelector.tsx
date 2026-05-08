@@ -13,6 +13,16 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   );
 }
 
+function LevelNum({ id }: { id: string }) {
+  const num = id.match(/^level-(\d+)/)?.[1];
+  if (!num) return null;
+  return (
+    <span className="text-cyber-muted font-mono text-[10px] shrink-0">
+      L-{num}
+    </span>
+  );
+}
+
 interface Props {
   levels: LevelInfo[];
   selectedId: string | null;
@@ -63,6 +73,7 @@ export default function LevelSelector({ levels, selectedId, onChange, disabled }
       >
         {selected ? (
           <div className="flex items-center gap-3 min-w-0">
+            <LevelNum id={selected.id} />
             <DifficultyBadge difficulty={selected.difficulty} />
             <span className="font-mono text-sm text-cyber-text">{selected.name}</span>
             <span className="text-cyber-cyan font-mono text-xs shrink-0">+{selected.xp} XP</span>
@@ -105,6 +116,7 @@ export default function LevelSelector({ levels, selectedId, onChange, disabled }
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-cyber-cyan/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
+                    <LevelNum id={level.id} />
                     <DifficultyBadge difficulty={level.difficulty} />
                     <span className="font-mono text-sm text-cyber-text flex-1">
                       {level.name}
