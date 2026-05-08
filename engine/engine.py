@@ -302,6 +302,18 @@ class K8sQuest:
     def __init__(self):
         self.base_dir = Path(__file__).parent.parent
         self.progress_file = self.base_dir / "progress.json"
+
+        # In web mode the backend may inject prior progress via env var so
+        # players can resume across sessions without a server-side account.
+        initial = os.environ.get("K8SQUEST_INITIAL_PROGRESS")
+        if initial and not self.progress_file.exists():
+            try:
+                data = json.loads(initial)
+                with open(self.progress_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            except Exception:
+                pass
+
         self.progress = self.load_progress()
 
     def load_progress(self):
