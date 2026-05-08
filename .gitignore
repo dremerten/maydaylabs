@@ -37,5 +37,7 @@ kubeconfig
 *.kubeconfig
 *.md
 !README.md
+!docs/
+!docs/**
 deploy-staging.sh
 triviy*
