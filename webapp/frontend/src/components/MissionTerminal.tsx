@@ -90,7 +90,7 @@ export default function MissionTerminal({ playerName = "" }: { playerName?: stri
         <span className="ml-2 font-mono text-[13px] text-cyber-muted">kubectl — mission-control</span>
       </div>
 
-      <div className="p-4 font-mono text-[22px] leading-relaxed flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      <div className="p-4 font-mono text-[17px] leading-relaxed flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         {/* prompt + typed command */}
         <div className="flex flex-wrap mb-1">
           <span className="text-cyber-cyan shrink-0">operator@k8squest</span>

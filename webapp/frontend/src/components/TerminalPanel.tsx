@@ -9,9 +9,10 @@ interface Props {
   accentColor?: "cyan" | "teal";
   onDisconnect?: () => void;
   showTitleBar?: boolean;
+  connectingMessage?: string;
 }
 
-export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDisconnect, showTitleBar = true }: Props) {
+export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDisconnect, showTitleBar = true, connectingMessage = "● Connecting…" }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<import("@xterm/xterm").Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -95,14 +96,14 @@ export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDi
     const term = xtermRef.current;
 
     term.clear();
-    term.write(`\x1b[36m● Connecting…\x1b[0m\r\n`);
+    term.write(`\x1b[36m${connectingMessage}\x1b[0m\r\n`);
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => {
-      term.write("\x1b[32m● Connected\x1b[0m\r\n\n");
+      term.write("\x1b[32mConnected\x1b[0m\r\n\n");
       term.focus();
       if (fitRef.current) {
         const dims = fitRef.current.proposeDimensions();

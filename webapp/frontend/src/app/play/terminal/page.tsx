@@ -87,6 +87,7 @@ function TerminalView() {
           accentColor={accentColor}
           onDisconnect={handleDisconnect}
           showTitleBar={false}
+          connectingMessage={isEngine ? "● Connecting…" : "Provisioning shell pod.... Please stand by"}
         />
       </div>
     </div>
