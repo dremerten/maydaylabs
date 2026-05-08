@@ -1,5 +1,12 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export interface LevelInfo {
   id: string;
   name: string;
@@ -29,19 +36,23 @@ export async function fetchLevels(): Promise<LevelInfo[]> {
   return res.json();
 }
 
-export async function createSession(levelId: string): Promise<SessionStatus> {
+export async function createSession(
+  levelId: string,
+  playerName?: string,
+  progress?: Record<string, unknown> | null,
+): Promise<SessionStatus> {
   const res = await fetch(`${BASE}/api/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ level: levelId }),
+    body: JSON.stringify({
+      level: levelId,
+      player_name: playerName?.trim() || "explorer",
+      progress: progress ?? null,
+    }),
   });
-  if (res.status === 429) {
-    const data = await res.json();
-    throw new Error(data.detail ?? "Too many active sessions. Please try again later.");
-  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail ?? "Failed to create session");
+    throw new ApiError(res.status, data.detail ?? "Failed to create session");
   }
   return res.json();
 }
@@ -54,6 +65,12 @@ export async function getSession(sessionId: string): Promise<SessionStatus> {
 
 export async function deleteSession(sessionId: string): Promise<void> {
   await fetch(`${BASE}/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+export async function getProgress(sessionId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${BASE}/api/sessions/${sessionId}/progress`);
+  if (!res.ok) throw new ApiError(res.status, "Progress not available");
+  return res.json();
 }
 
 export function wsUrl(sessionId: string, terminal: "engine" | "shell"): string {

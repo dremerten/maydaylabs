@@ -23,12 +23,18 @@ fix_*.sh
 *.swp
 *.swo
 *~
+.*c*
 
 # OS
 .DS_Store
 Thumbs.db
 
+# Next.js build output
+webapp/frontend/.next/
+
 # Kubernetes
 kubeconfig
 *.kubeconfig
 *.md
+deploy-staging.sh
+triviy*
