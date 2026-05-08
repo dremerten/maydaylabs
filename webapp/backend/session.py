@@ -21,8 +21,11 @@ _WORLDS_ROOT = Path(settings.worlds_path)
 _sessions: dict[str, SessionStatus] = {}
 
 
-def _session_ns(session_id: str) -> str:
-    return f"{NAMESPACE_PREFIX}{session_id}"
+def _make_namespace(session_id: str, player_name: str, level_id: str) -> str:
+    safe_name = re.sub(r'[^a-z0-9]+', '-', player_name.lower().strip())[:10].strip('-') or "player"
+    m = re.match(r'(level-\d+)', level_id)
+    safe_level = m.group(1) if m else re.sub(r'[^a-z0-9]+', '-', level_id)[:10].strip('-')
+    return f"{NAMESPACE_PREFIX}{safe_name}-{safe_level}-{session_id[:6]}"
 
 
 def _assert_maydaylabs_ns(namespace: str) -> None:
@@ -34,9 +37,8 @@ def _assert_maydaylabs_ns(namespace: str) -> None:
         )
 
 
-def _substitute_namespace(text: str, session_id: str) -> str:
+def _substitute_namespace(text: str, ns: str) -> str:
     """Replace 'k8squest' placeholder in manifest templates with the session namespace."""
-    ns = _session_ns(session_id)
     return text.replace("k8squest", ns)
 
 
@@ -47,7 +49,7 @@ def _find_level_dir(level_id: str) -> Path | None:
     return None
 
 
-def _create_level_configmap(namespace: str, level_id: str, level_dir: Path, session_id: str) -> str:
+def _create_level_configmap(namespace: str, level_id: str, level_dir: Path, ns: str) -> str:
     """Create a ConfigMap with all level files; return the ConfigMap name."""
     cm_name = f"level-files-{level_id}"
     data: dict[str, str] = {}
@@ -55,7 +57,7 @@ def _create_level_configmap(namespace: str, level_id: str, level_dir: Path, sess
         if f.is_file():
             try:
                 content = f.read_text(errors="replace")
-                data[f.name] = _substitute_namespace(content, session_id)
+                data[f.name] = _substitute_namespace(content, ns)
             except Exception:
                 pass
     k8s.core().create_namespaced_config_map(
@@ -68,8 +70,16 @@ def _create_level_configmap(namespace: str, level_id: str, level_dir: Path, sess
     return cm_name
 
 
-def _build_engine_pod(session_id: str, level_id: str) -> client.V1Pod:
-    ns = _session_ns(session_id)
+def _build_engine_pod(session_id: str, ns: str, level_id: str, progress_json: str | None = None) -> client.V1Pod:
+    env_vars = [
+        client.V1EnvVar(name="K8SQUEST_NAMESPACE", value=ns),
+        client.V1EnvVar(name="K8SQUEST_WEB", value="true"),
+        client.V1EnvVar(name="K8SQUEST_LEVEL", value=level_id),
+        client.V1EnvVar(name="NAMESPACE", value=ns),
+    ]
+    if progress_json:
+        env_vars.append(client.V1EnvVar(name="K8SQUEST_INITIAL_PROGRESS", value=progress_json))
+
     return client.V1Pod(
         metadata=client.V1ObjectMeta(
             name=f"engine-{session_id}",
@@ -87,15 +97,10 @@ def _build_engine_pod(session_id: str, level_id: str) -> client.V1Pod:
                 client.V1Container(
                     name="engine",
                     image=settings.engine_image,
-                    image_pull_policy="Never",
+                    image_pull_policy="Always",
                     stdin=True,
                     tty=True,
-                    env=[
-                        client.V1EnvVar(name="K8SQUEST_NAMESPACE", value=ns),
-                        client.V1EnvVar(name="K8SQUEST_WEB", value="true"),
-                        client.V1EnvVar(name="K8SQUEST_LEVEL", value=level_id),
-                        client.V1EnvVar(name="NAMESPACE", value=ns),
-                    ],
+                    env=env_vars,
                     security_context=client.V1SecurityContext(
                         allow_privilege_escalation=False,
                         capabilities=client.V1Capabilities(drop=["ALL"]),
@@ -111,8 +116,7 @@ def _build_engine_pod(session_id: str, level_id: str) -> client.V1Pod:
     )
 
 
-def _build_shell_pod(session_id: str, level_id: str, level_cm: str | None = None) -> client.V1Pod:
-    ns = _session_ns(session_id)
+def _build_shell_pod(session_id: str, ns: str, level_id: str, level_cm: str | None = None) -> client.V1Pod:
 
     volume_mounts = [
         client.V1VolumeMount(name="tmp", mount_path="/tmp"),
@@ -143,7 +147,7 @@ def _build_shell_pod(session_id: str, level_id: str, level_cm: str | None = None
         init_containers.append(client.V1Container(
             name="level-init",
             image=settings.shell_image,
-            image_pull_policy="Never",
+            image_pull_policy="Always",
             command=["sh", "-c", f"cp /level-src/* /home/k8squest/{level_id}/ && chmod u+rw /home/k8squest/{level_id}/*"],
             volume_mounts=[
                 client.V1VolumeMount(name="level-src", mount_path="/level-src", read_only=True),
@@ -175,7 +179,7 @@ def _build_shell_pod(session_id: str, level_id: str, level_cm: str | None = None
                 client.V1Container(
                     name="shell",
                     image=settings.shell_image,
-                    image_pull_policy="Never",
+                    image_pull_policy="Always",
                     stdin=True,
                     tty=True,
                     env=[
@@ -291,6 +295,21 @@ def _apply_session_rbac(session_id: str, namespace: str) -> None:
                 verbs=["get", "list", "watch", "create", "update", "patch", "delete"],
             ),
             client.V1PolicyRule(
+                api_groups=["autoscaling"],
+                resources=["horizontalpodautoscalers"],
+                verbs=["get", "list", "watch", "create", "update", "patch", "delete"],
+            ),
+            client.V1PolicyRule(
+                api_groups=["policy"],
+                resources=["poddisruptionbudgets"],
+                verbs=["get", "list", "watch", "create", "update", "patch", "delete"],
+            ),
+            client.V1PolicyRule(
+                api_groups=["discovery.k8s.io"],
+                resources=["endpointslices"],
+                verbs=["get", "list", "watch"],
+            ),
+            client.V1PolicyRule(
                 api_groups=["rbac.authorization.k8s.io"],
                 resources=["roles", "rolebindings"],
                 verbs=["get", "list", "watch", "create", "update", "patch", "delete"],
@@ -315,7 +334,7 @@ def _apply_session_rbac(session_id: str, namespace: str) -> None:
     )
     k8s.rbac().create_namespaced_role_binding(namespace=namespace, body=binding)
 
-    # Cluster-level read-only binding so the player can `kubectl get nodes/namespaces/storageclasses`
+    # Cluster-level read-only binding so the player can `kubectl get namespaces/storageclasses`
     k8s.rbac().create_cluster_role_binding(
         body=client.V1ClusterRoleBinding(
             metadata=client.V1ObjectMeta(
@@ -336,9 +355,9 @@ def _apply_session_rbac(session_id: str, namespace: str) -> None:
     )
 
 
-async def create_session(level_id: str, client_ip: str) -> SessionStatus:
+async def create_session(level_id: str, client_ip: str, player_name: str = "explorer", progress: dict | None = None) -> SessionStatus:
     session_id = uuid.uuid4().hex[:8]
-    ns = _session_ns(session_id)
+    ns = _make_namespace(session_id, player_name, level_id)
     now = datetime.now(timezone.utc)
     expires_at = datetime.fromtimestamp(now.timestamp() + settings.session_ttl_seconds, tz=timezone.utc)
 
@@ -374,7 +393,7 @@ async def create_session(level_id: str, client_ip: str) -> SessionStatus:
             broken_yaml = level_dir / "broken.yaml"
             if broken_yaml.exists():
                 raw = broken_yaml.read_text()
-                subst = _substitute_namespace(raw, session_id)
+                subst = _substitute_namespace(raw, ns)
                 for doc in yaml.safe_load_all(subst):
                     if doc:
                         k8s.apply_manifest_dict(ns, doc)
@@ -382,11 +401,12 @@ async def create_session(level_id: str, client_ip: str) -> SessionStatus:
         # Create ConfigMap with level files so the shell pod has them at ~/level/
         level_cm = None
         if level_dir:
-            level_cm = _create_level_configmap(ns, level_id, level_dir, session_id)
+            level_cm = _create_level_configmap(ns, level_id, level_dir, ns)
 
         # Launch engine and shell pods
-        k8s.create_pod(ns, _build_engine_pod(session_id, level_id))
-        k8s.create_pod(ns, _build_shell_pod(session_id, level_id, level_cm))
+        progress_json = json.dumps(progress) if progress else None
+        k8s.create_pod(ns, _build_engine_pod(session_id, ns, level_id, progress_json))
+        k8s.create_pod(ns, _build_shell_pod(session_id, ns, level_id, level_cm))
 
     except Exception:
         # Roll back namespace and counters on any failure

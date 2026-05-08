@@ -83,6 +83,22 @@ def get_pod_phase(namespace: str, name: str) -> str | None:
         return None
 
 
+def exec_in_pod(namespace: str, pod_name: str, command: list[str]) -> str:
+    """Execute a command in a running pod and return stdout (no tty)."""
+    from kubernetes.stream import stream
+    _load()
+    return stream(
+        core().connect_get_namespaced_pod_exec,
+        pod_name,
+        namespace,
+        command=command,
+        stderr=False,
+        stdin=False,
+        stdout=True,
+        tty=False,
+    )
+
+
 def get_pod_ip(namespace: str, name: str) -> str | None:
     try:
         pod = core().read_namespaced_pod(name=name, namespace=namespace)

@@ -20,6 +20,8 @@ class LevelInfo(BaseModel):
 
 class SessionCreate(BaseModel):
     level: str
+    player_name: str = "explorer"
+    progress: dict | None = None  # optional prior progress to seed the engine pod
 
 
 class SessionStatus(BaseModel):
