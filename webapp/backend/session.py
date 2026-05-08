@@ -109,6 +109,12 @@ def _build_engine_pod(session_id: str, ns: str, level_id: str, progress_json: st
                         requests={"cpu": "100m", "memory": "128Mi"},
                         limits={"cpu": "250m", "memory": "256Mi"},
                     ),
+                    liveness_probe=client.V1Probe(
+                        _exec=client.V1ExecAction(command=["/bin/true"]),
+                        initial_delay_seconds=5,
+                        period_seconds=30,
+                        failure_threshold=3,
+                    ),
                 )
             ],
             volumes=[],
@@ -196,6 +202,18 @@ def _build_shell_pod(session_id: str, ns: str, level_id: str, level_cm: str | No
                     resources=client.V1ResourceRequirements(
                         requests={"cpu": "50m", "memory": "64Mi"},
                         limits={"cpu": "150m", "memory": "128Mi"},
+                    ),
+                    readiness_probe=client.V1Probe(
+                        tcp_socket=client.V1TCPSocketAction(port=7681),
+                        initial_delay_seconds=8,
+                        period_seconds=5,
+                        failure_threshold=6,
+                    ),
+                    liveness_probe=client.V1Probe(
+                        tcp_socket=client.V1TCPSocketAction(port=7681),
+                        initial_delay_seconds=20,
+                        period_seconds=15,
+                        failure_threshold=3,
                     ),
                     volume_mounts=volume_mounts,
                 )
@@ -379,7 +397,7 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
         _bind_backend_to_namespace(ns)
 
         # Apply ResourceQuota and LimitRange
-        _apply_namespace_quotas(ns)
+        _apply_namespace_quotas(ns, level_id)
 
         # Create engine SA + cluster-wide binding (engine pod needs cross-ns resource access)
         _bind_engine_to_session(session_id, ns)
@@ -469,8 +487,23 @@ def get_session(session_id: str) -> SessionStatus | None:
     return session
 
 
-def _apply_namespace_quotas(namespace: str) -> None:
+def _apply_namespace_quotas(namespace: str, level_id: str = "") -> None:
     _assert_maydaylabs_ns(namespace)
+
+    if level_id == "level-4-pending":
+        # This level teaches that pods stay Pending when resource requests exceed
+        # node capacity. The broken pod requests 999Gi/999 CPU — accepted by the API
+        # only when no LimitRange injects lower default limits and no ResourceQuota
+        # caps total requests. Only a pod-count quota is applied here.
+        k8s.core().create_namespaced_resource_quota(
+            namespace=namespace,
+            body=client.V1ResourceQuota(
+                metadata=client.V1ObjectMeta(name="maydaylabs-quota", namespace=namespace),
+                spec=client.V1ResourceQuotaSpec(hard={"pods": "15"}),
+            ),
+        )
+        return
+
     quota = client.V1ResourceQuota(
         metadata=client.V1ObjectMeta(name="maydaylabs-quota", namespace=namespace),
         spec=client.V1ResourceQuotaSpec(

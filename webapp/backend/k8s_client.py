@@ -1,4 +1,6 @@
 """Thin wrapper around the kubernetes Python client."""
+import time
+
 from kubernetes import client, config as k8s_config
 from kubernetes.client.exceptions import ApiException
 
@@ -39,10 +41,32 @@ def dynamic():
 
 
 def create_namespace(name: str, labels: dict | None = None) -> None:
-    ns = client.V1Namespace(
+    ns_body = client.V1Namespace(
         metadata=client.V1ObjectMeta(name=name, labels=labels or {})
     )
-    core().create_namespace(ns)
+    try:
+        core().create_namespace(ns_body)
+        return
+    except ApiException as e:
+        if e.status != 409:
+            raise
+
+    # 409: namespace exists — it's likely Terminating from a previous session cleanup.
+    # Poll until it disappears (404), then create fresh.
+    for _ in range(30):
+        try:
+            ns = core().read_namespace(name)
+        except ApiException as inner:
+            if inner.status == 404:
+                break  # fully gone
+            raise
+        if ns.status.phase != "Terminating":
+            raise RuntimeError(f"Namespace '{name}' already exists and is Active — cannot overwrite")
+        time.sleep(1)
+    else:
+        raise RuntimeError(f"Namespace '{name}' stuck in Terminating for 30s")
+
+    core().create_namespace(ns_body)
 
 
 def delete_namespace(name: str) -> None:
