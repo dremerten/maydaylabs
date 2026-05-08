@@ -75,11 +75,3 @@ Each level includes:
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full breakdown of how the platform works — request flow, namespace isolation, security layers, and the two-tab model.
-
----
-
-## Contributing
-
-Want to contribute a level or report a bug? Open an issue or pull request on GitHub.
-
-See [docs/contributing.md](docs/contributing.md) for the level format and contribution guidelines.
