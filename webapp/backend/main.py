@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 
 import httpx
@@ -11,6 +12,7 @@ import k8s_client as k8s
 import session as session_manager
 from levels import get_level, get_levels
 from models import SessionCreate, SessionStatus
+from config import settings
 from rate_limit import RateLimitExceeded
 from terminal import bridge_terminal
 
@@ -66,13 +68,16 @@ async def create_session(body: SessionCreate, request: Request):
             detail=f"Level '{body.level}' requires local installation (node operations not supported in web mode).",
         )
 
+    if body.progress and len(json.dumps(body.progress)) > 10_000:
+        raise HTTPException(status_code=422, detail="Progress data too large")
+
     try:
-        sess = await session_manager.create_session(body.level, _client_ip(request))
+        sess = await session_manager.create_session(body.level, _client_ip(request), body.player_name, body.progress)
     except RateLimitExceeded as e:
         return JSONResponse(
             status_code=429,
             content={"detail": e.reason},
-            headers={"Retry-After": str(2700)},
+            headers={"Retry-After": str(settings.session_ttl_seconds)},
         )
     except Exception as e:
         logger.exception("Failed to create session")
@@ -89,6 +94,26 @@ async def get_session(session_id: str):
     if sess.status == "expired":
         asyncio.create_task(session_manager.delete_session(session_id))
     return sess
+
+
+@app.get("/api/sessions/{session_id}/progress", include_in_schema=True)
+async def get_session_progress(session_id: str):
+    sess = session_manager.get_session(session_id)
+    if sess is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+    if sess.status != "ready":
+        raise HTTPException(status_code=409, detail="Session not ready yet")
+
+    loop = asyncio.get_event_loop()
+    try:
+        content = await loop.run_in_executor(
+            None,
+            lambda: k8s.exec_in_pod(sess.namespace, f"engine-{session_id}", ["cat", "/app/progress.json"]),
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Progress not available yet")
+
+    return Response(content=content, media_type="application/json")
 
 
 @app.delete("/api/sessions/{session_id}", status_code=204)
