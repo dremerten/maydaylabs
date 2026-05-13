@@ -124,7 +124,7 @@ def exec_in_pod(namespace: str, pod_name: str, command: list[str]) -> str:
     """Execute a command in a running pod and return stdout (no tty)."""
     from kubernetes.stream import stream
     _load()
-    return stream(
+    resp = stream(
         core().connect_get_namespaced_pod_exec,
         pod_name,
         namespace,
@@ -133,7 +133,10 @@ def exec_in_pod(namespace: str, pod_name: str, command: list[str]) -> str:
         stdin=False,
         stdout=True,
         tty=False,
+        _preload_content=False,
     )
+    resp.run_forever(timeout=10)
+    return resp.read_stdout()
 
 
 def get_pod_ip(namespace: str, name: str) -> str | None:
