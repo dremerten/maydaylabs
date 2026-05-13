@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { wsUrl } from "@/lib/api";
 import TerminalPanel from "@/components/TerminalPanel";
+import CountdownTimer from "@/components/CountdownTimer";
 import Link from "next/link";
 
 function TerminalView() {
@@ -13,11 +14,20 @@ function TerminalView() {
 
   const [endpoint, setEndpoint] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
     setEndpoint(wsUrl(sessionId, type));
   }, [sessionId, type]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`/api/sessions/${sessionId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.expires_at) setExpiresAt(data.expires_at); })
+      .catch(() => {});
+  }, [sessionId]);
 
   // Only the shell tab closing ends the session — engine tab close is non-destructive.
   // keepalive ensures the DELETE reaches the backend even as the tab is closing.
@@ -72,6 +82,11 @@ function TerminalView() {
         <span className="font-mono text-[10px] text-gray-500 ml-1">
           {sessionId}
         </span>
+        {expiresAt && !ended && (
+          <span className="ml-auto">
+            <CountdownTimer expiresAt={expiresAt} />
+          </span>
+        )}
         {ended && (
           <span className="ml-auto font-mono text-[10px] text-red-500">
             session ended — you may close this tab
@@ -87,7 +102,9 @@ function TerminalView() {
           accentColor={accentColor}
           onDisconnect={handleDisconnect}
           showTitleBar={false}
-          connectingMessage={isEngine ? "● Connecting…" : "Provisioning shell pod.... Please stand by"}
+          connectingMessage={isEngine ? "● Connecting…" : undefined}
+          animateConnecting={!isEngine}
+          postConnectHint={!isEngine ? "💡 Run: exec bash  (loads shortcuts + custom prompt)" : undefined}
         />
       </div>
     </div>

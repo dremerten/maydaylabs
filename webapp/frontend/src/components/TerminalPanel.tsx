@@ -10,9 +10,11 @@ interface Props {
   onDisconnect?: () => void;
   showTitleBar?: boolean;
   connectingMessage?: string;
+  animateConnecting?: boolean;
+  postConnectHint?: string;
 }
 
-export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDisconnect, showTitleBar = true, connectingMessage = "● Connecting…" }: Props) {
+export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDisconnect, showTitleBar = true, connectingMessage = "● Connecting…", animateConnecting = false, postConnectHint }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<import("@xterm/xterm").Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -96,14 +98,46 @@ export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDi
     const term = xtermRef.current;
 
     term.clear();
-    term.write(`\x1b[36m${connectingMessage}\x1b[0m\r\n`);
+
+    let spinTimer: ReturnType<typeof setInterval> | null = null;
+
+    if (animateConnecting) {
+      const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      const steps = [
+        "Creating unique namespace sandbox",
+        "Applying broken cluster resources",
+        "Launching shell pod",
+        "Waiting for pod to become ready",
+      ];
+      let frame = 0;
+      let step = 0;
+      term.write(`\x1b[36m${spinnerFrames[0]} ${steps[0]}...\x1b[0m`);
+      spinTimer = setInterval(() => {
+        frame++;
+        if (frame % 20 === 0 && step < steps.length - 1) step++;
+        const spinner = spinnerFrames[frame % spinnerFrames.length];
+        const label2 = steps[step];
+        term.write(`\r\x1b[36m${spinner} ${label2}...\x1b[0m`);
+      }, 80);
+    } else {
+      term.write(`\x1b[36m${connectingMessage}\x1b[0m\r\n`);
+    }
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => {
-      term.write("\x1b[32mConnected\x1b[0m\r\n\n");
+      if (spinTimer) {
+        clearInterval(spinTimer);
+        spinTimer = null;
+        term.write("\r\n");
+      }
+      term.write("\x1b[32mConnected\x1b[0m\r\n");
+      if (postConnectHint) {
+        term.write(`\x1b[33m${postConnectHint}\x1b[0m\r\n`);
+      }
+      term.write("\n");
       term.focus();
       if (fitRef.current) {
         const dims = fitRef.current.proposeDimensions();
@@ -147,12 +181,13 @@ export default function TerminalPanel({ wsUrl, label, accentColor = "cyan", onDi
     });
 
     return () => {
+      if (spinTimer) clearInterval(spinTimer);
       inputDispose.dispose();
       resizeDispose.dispose();
       ws.close();
       wsRef.current = null;
     };
-  }, [wsUrl, termReady, onDisconnect]);
+  }, [wsUrl, termReady, onDisconnect, animateConnecting]);
 
   return (
     <div
