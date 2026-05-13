@@ -16,6 +16,7 @@ progress.json
 *.log
 test_*.md
 fix_*.sh
+tmp/
 
 # IDE
 .vscode/
@@ -24,6 +25,10 @@ fix_*.sh
 *.swo
 *~
 .*c*
+
+.claude/
+CLAUDE.md
+claude.md
 
 # OS
 .DS_Store
