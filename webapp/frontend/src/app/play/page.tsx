@@ -127,6 +127,7 @@ export default function PlayPage() {
   const [isCapacityError, setIsCapacityError] = useState(false);
   const [storedProgress, setStoredProgress] = useState<ProgressData | null>(null);
   const [progressError, setProgressError] = useState(false);
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -292,13 +293,26 @@ export default function PlayPage() {
         )}
         {session && uiStatus === "ready" && (
           <>
-            <button
-              onClick={handleDownloadProgress}
-              title="Download progress.json — upload on the home page to resume next time"
-              className="font-mono text-xs text-cyber-cyan border border-cyber-cyan/30 rounded px-3 py-1.5 hover:bg-cyber-cyan/10 transition-colors"
-            >
-              ↓ Progress
-            </button>
+            <div className="relative inline-flex items-center gap-1">
+              <button
+                onClick={handleDownloadProgress}
+                className="font-mono text-xs text-cyber-cyan border border-cyber-cyan/30 rounded px-3 py-1.5 hover:bg-cyber-cyan/10 transition-colors"
+              >
+                Download Progress
+              </button>
+              <span
+                className="text-cyber-cyan/60 text-xs cursor-default select-none"
+                onMouseEnter={() => setShowInfoTooltip(true)}
+                onMouseLeave={() => setShowInfoTooltip(false)}
+              >
+                ⓘ
+                {showInfoTooltip && (
+                  <span className="absolute right-0 top-full mt-1 w-56 rounded bg-gray-900 border border-cyber-cyan/20 px-2 py-1.5 text-[10px] text-cyber-muted z-50 text-center whitespace-normal pointer-events-none">
+                    Download your current progress so you can resume at a later time
+                  </span>
+                )}
+              </span>
+            </div>
             {progressError && (
               <span className="font-mono text-[10px] text-cyber-red">No progress yet — complete a level first</span>
             )}
