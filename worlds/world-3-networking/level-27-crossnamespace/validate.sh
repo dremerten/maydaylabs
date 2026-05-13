@@ -6,7 +6,7 @@ NAMESPACE="${NAMESPACE:-k8squest}"
 
 set -e
 
-FRONTEND_NAMESPACE="k8squest"
+FRONTEND_NAMESPACE="${NAMESPACE}"
 BACKEND_NAMESPACE="backend-ns"
 FRONTEND_POD="frontend-app"
 BACKEND_SERVICE="api-service"

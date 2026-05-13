@@ -1140,7 +1140,14 @@ Look for "2/2" ready replicas!
 
                     # Show debrief - THE LEARNING MOMENT!
                     self.show_debrief(level_path)
-                    
+
+                    if K8SQUEST_WEB:
+                        console.print(
+                            "\n[bold cyan]Level complete![/bold cyan] "
+                            "[dim]Return to Mission Control to select your next level.[/dim]\n"
+                        )
+                        return True
+
                     # Pause before asking about next challenge
                     console.print("\n[dim]Press Enter to continue...[/dim]")
                     input()
