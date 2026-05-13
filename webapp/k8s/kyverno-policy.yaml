@@ -113,6 +113,44 @@ spec:
         any:
           - resources:
               namespaces: ["maydaylabs-*", "maydaylabs-system"]
+          # level-10-namespace: broken.yaml intentionally places pods/services in
+          # the shared default namespace as part of the cross-namespace learning objective.
+          - resources:
+              namespaces: ["default"]
+            subjects:
+              - kind: ServiceAccount
+                name: maydaylabs-backend
+                namespace: maydaylabs-system
       validate:
         message: "ServiceAccounts in maydaylabs-system may only manage resources in maydaylabs-* namespaces"
+        deny: {}
+---
+# Policy 4: Prevent players from exec-ing into the engine pod.
+# Player RBAC grants pods/exec on the session namespace (cannot be scoped by label via RBAC).
+# The engine pod carries label component=engine; Kyverno enforces the exec block at admission.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: maydaylabs-restrict-engine-exec
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: deny-exec-into-engine-pod
+      match:
+        any:
+          - resources:
+              kinds: ["Pod/exec"]
+              operations: ["CREATE"]
+              selector:
+                matchLabels:
+                  component: engine
+      exclude:
+        any:
+          - subjects:
+              - kind: ServiceAccount
+                name: maydaylabs-backend
+                namespace: maydaylabs-system
+      validate:
+        message: "Exec into engine pods is not allowed"
         deny: {}
