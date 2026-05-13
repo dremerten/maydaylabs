@@ -48,8 +48,9 @@ async def check_and_increment(level_id: str, client_ip: str) -> None:
 
     if total >= settings.max_sessions_total:
         raise RateLimitExceeded(f"Server is at capacity ({settings.max_sessions_total} active sessions). Try again later.")
-    if per_level >= settings.max_sessions_per_level:
-        raise RateLimitExceeded(f"This level already has {settings.max_sessions_per_level} active sessions. Try again later.")
+    level_cap = settings.max_sessions_per_level_overrides.get(level_id, settings.max_sessions_per_level)
+    if per_level >= level_cap:
+        raise RateLimitExceeded(f"This level already has {level_cap} active sessions. Try again later.")
     if per_ip >= settings.max_sessions_per_ip:
         raise RateLimitExceeded(f"You already have {settings.max_sessions_per_ip} active sessions. Close one first.")
 

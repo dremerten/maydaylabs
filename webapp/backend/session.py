@@ -16,6 +16,37 @@ from models import SessionStatus
 
 _WORLDS_ROOT = Path(settings.worlds_path)
 
+_NETWORK_POLICY_TEMPLATE = """
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-session
+  namespace: SESSION_NS
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 6443
+"""
+
 # In-memory session map: session_id → SessionStatus
 # Redis is used for rate limiting; this dict is the fast path for status lookups.
 _sessions: dict[str, SessionStatus] = {}
@@ -84,7 +115,7 @@ def _build_engine_pod(session_id: str, ns: str, level_id: str, progress_json: st
         metadata=client.V1ObjectMeta(
             name=f"engine-{session_id}",
             namespace=ns,
-            labels={"app": "maydaylabs-engine", "session": session_id},
+            labels={"app": "maydaylabs-engine", "session": session_id, "component": "engine"},
         ),
         spec=client.V1PodSpec(
             restart_policy="Never",
@@ -127,15 +158,10 @@ def _build_shell_pod(session_id: str, ns: str, level_id: str, level_cm: str | No
     volume_mounts = [
         client.V1VolumeMount(name="tmp", mount_path="/tmp"),
         client.V1VolumeMount(name="home", mount_path="/home/k8squest"),
-        client.V1VolumeMount(name="docker-sock", mount_path="/var/run/docker.sock"),
     ]
     volumes = [
         client.V1Volume(name="tmp", empty_dir=client.V1EmptyDirVolumeSource()),
         client.V1Volume(name="home", empty_dir=client.V1EmptyDirVolumeSource()),
-        client.V1Volume(
-            name="docker-sock",
-            host_path=client.V1HostPathVolumeSource(path="/var/run/docker.sock", type="Socket"),
-        ),
     ]
     init_containers = []
 
@@ -179,7 +205,6 @@ def _build_shell_pod(session_id: str, ns: str, level_id: str, level_cm: str | No
             security_context=client.V1PodSecurityContext(
                 run_as_non_root=True,
                 run_as_user=1000,
-                supplemental_groups=[975],
             ),
             containers=[
                 client.V1Container(
@@ -209,12 +234,10 @@ def _build_shell_pod(session_id: str, ns: str, level_id: str, level_cm: str | No
                         period_seconds=5,
                         failure_threshold=6,
                     ),
-                    liveness_probe=client.V1Probe(
-                        tcp_socket=client.V1TCPSocketAction(port=7681),
-                        initial_delay_seconds=20,
-                        period_seconds=15,
-                        failure_threshold=3,
-                    ),
+                    # No liveness probe — with restartPolicy=Never, a failed liveness probe
+                    # terminates the container permanently. The NetworkPolicy's ingress rule
+                    # can block the kubelet's TCP probe on port 7681, causing spurious failures
+                    # that would kill the container and drop the player's exec session.
                     volume_mounts=volume_mounts,
                 )
             ],
@@ -323,6 +346,11 @@ def _apply_session_rbac(session_id: str, namespace: str) -> None:
                 verbs=["get", "list", "watch", "create", "update", "patch", "delete"],
             ),
             client.V1PolicyRule(
+                api_groups=["events.k8s.io"],
+                resources=["events"],
+                verbs=["get", "list", "watch"],
+            ),
+            client.V1PolicyRule(
                 api_groups=["discovery.k8s.io"],
                 resources=["endpointslices"],
                 verbs=["get", "list", "watch"],
@@ -373,6 +401,70 @@ def _apply_session_rbac(session_id: str, namespace: str) -> None:
     )
 
 
+def _apply_network_policy(namespace: str) -> None:
+    _assert_maydaylabs_ns(namespace)
+    raw = _NETWORK_POLICY_TEMPLATE.replace("SESSION_NS", namespace)
+    doc = yaml.safe_load(raw)
+    k8s.apply_manifest_dict(namespace, doc)
+
+
+def _bind_backend_to_extra_namespace(namespace: str, session_id: str) -> None:
+    """Bind the backend SA to maydaylabs-backend-default-ns ClusterRole in an arbitrary namespace.
+
+    Used for levels where broken.yaml creates resources outside the session namespace
+    (e.g. level-10 creates pods/services in 'default', level-27 creates them in 'backend-ns').
+    Does NOT call _assert_maydaylabs_ns — this is intentionally cross-namespace.
+    The RoleBinding carries a session label so it can be found and deleted at teardown.
+    """
+    binding = client.V1RoleBinding(
+        metadata=client.V1ObjectMeta(
+            name=f"maydaylabs-backend-{session_id}",
+            namespace=namespace,
+            labels={"maydaylabs-session": session_id},
+        ),
+        subjects=[client.RbacV1Subject(
+            kind="ServiceAccount",
+            name="maydaylabs-backend",
+            namespace="maydaylabs-system",
+        )],
+        role_ref=client.V1RoleRef(
+            api_group="rbac.authorization.k8s.io",
+            kind="ClusterRole",
+            name="maydaylabs-backend-default-ns",
+        ),
+    )
+    k8s.rbac().create_namespaced_role_binding(namespace=namespace, body=binding)
+
+
+def _bind_player_to_extra_namespace(session_id: str, player_sa_ns: str, target_namespace: str) -> None:
+    """Bind the player SA to maydaylabs-player-default-ns ClusterRole in an arbitrary namespace.
+
+    Used alongside _bind_backend_to_extra_namespace so the player shell pod can also
+    interact with resources in non-session namespaces (e.g. delete from default in level-10,
+    or read/write backend-ns in level-27).
+    Does NOT call _assert_maydaylabs_ns.
+    """
+    sa_name = f"maydaylabs-player-{session_id}"
+    binding = client.V1RoleBinding(
+        metadata=client.V1ObjectMeta(
+            name=f"maydaylabs-player-{session_id}",
+            namespace=target_namespace,
+            labels={"maydaylabs-session": session_id},
+        ),
+        subjects=[client.RbacV1Subject(
+            kind="ServiceAccount",
+            name=sa_name,
+            namespace=player_sa_ns,
+        )],
+        role_ref=client.V1RoleRef(
+            api_group="rbac.authorization.k8s.io",
+            kind="ClusterRole",
+            name="maydaylabs-player-default-ns",
+        ),
+    )
+    k8s.rbac().create_namespaced_role_binding(namespace=target_namespace, body=binding)
+
+
 async def create_session(level_id: str, client_ip: str, player_name: str = "explorer", progress: dict | None = None) -> SessionStatus:
     session_id = uuid.uuid4().hex[:8]
     ns = _make_namespace(session_id, player_name, level_id)
@@ -405,6 +497,41 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
         # Create player RBAC
         _apply_session_rbac(session_id, ns)
 
+        # Apply per-session NetworkPolicy (blocks internet egress, allows intra-ns + DNS + k8s API)
+        _apply_network_policy(ns)
+
+        # Level-specific extra-namespace bindings.
+        # These must be created BEFORE applying broken.yaml so the backend SA has permission
+        # to create resources in the target namespace.
+        if level_id == "level-10-namespace":
+            # broken.yaml places a Pod and Service in 'default' (intentionally wrong namespace).
+            # Bind backend SA first so it has permission to delete + poll in 'default'.
+            _bind_backend_to_extra_namespace("default", session_id)
+            # Pre-delete any orphaned resources from a previous session that wasn't cleaned up —
+            # these have fixed names so a 409 would abort session creation otherwise.
+            for _pod in ("client-app",):
+                try:
+                    k8s.core().delete_namespaced_pod(_pod, "default")
+                except Exception:
+                    pass
+                k8s.wait_for_pod_deleted("default", _pod)
+            for _svc in ("backend-service",):
+                try:
+                    k8s.core().delete_namespaced_service(_svc, "default")
+                except Exception:
+                    pass
+            _bind_player_to_extra_namespace(session_id, ns, "default")
+        elif level_id == "level-27-crossnamespace":
+            # broken.yaml creates the 'backend-ns' namespace and places a Pod + Service there.
+            # The namespace itself is created by create_from_dict (cluster-scoped; already
+            # permitted by maydaylabs-backend-cluster). We need to bind both SAs into it
+            # so resources can be created and the player can manage them.
+            # We use a best-effort approach: the namespace may not exist yet when we run
+            # create_from_dict, so we create the namespace explicitly first, then bind.
+            k8s.create_namespace("backend-ns", labels={"maydaylabs-session": session_id})
+            _bind_backend_to_extra_namespace("backend-ns", session_id)
+            _bind_player_to_extra_namespace(session_id, ns, "backend-ns")
+
         # Apply broken.yaml (with namespace substituted)
         level_dir = _find_level_dir(level_id)
         if level_dir:
@@ -414,6 +541,10 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
                 subst = _substitute_namespace(raw, ns)
                 for doc in yaml.safe_load_all(subst):
                     if doc:
+                        # Skip Namespace docs for level-27 — backend-ns is pre-created
+                        # above so the bindings can be established before resources land.
+                        if level_id == "level-27-crossnamespace" and doc.get("kind") == "Namespace":
+                            continue
                         k8s.apply_manifest_dict(ns, doc)
 
         # Create ConfigMap with level files so the shell pod has them at ~/level/
@@ -429,6 +560,9 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
     except Exception:
         # Roll back namespace and counters on any failure
         k8s.delete_namespace(ns)
+        # For level-27, also clean up the pre-created backend-ns
+        if level_id == "level-27-crossnamespace":
+            k8s.delete_namespace("backend-ns")
         await rate_limit.decrement(level_id, client_ip)
         raise
 
@@ -465,6 +599,40 @@ async def delete_session(session_id: str) -> None:
             k8s.rbac().delete_cluster_role_binding(crb)
         except Exception:
             pass
+
+    # Clean up extra-namespace RoleBindings created for levels that operate outside
+    # the session namespace (level-10: default, level-27: backend-ns).
+    if session.level == "level-10-namespace":
+        for rb_name in (f"maydaylabs-backend-{session_id}", f"maydaylabs-player-{session_id}"):
+            try:
+                k8s.rbac().delete_namespaced_role_binding(rb_name, "default")
+            except Exception:
+                pass
+        # Delete the pod and service placed in 'default' by broken.yaml — they are not
+        # cleaned up by namespace deletion (which only removes the session namespace).
+        for pod_name in ("client-app",):
+            try:
+                k8s.core().delete_namespaced_pod(pod_name, "default")
+            except Exception:
+                pass
+        for svc_name in ("backend-service",):
+            try:
+                k8s.core().delete_namespaced_service(svc_name, "default")
+            except Exception:
+                pass
+    elif session.level == "level-27-crossnamespace":
+        for rb_name in (f"maydaylabs-backend-{session_id}", f"maydaylabs-player-{session_id}"):
+            try:
+                k8s.rbac().delete_namespaced_role_binding(rb_name, "backend-ns")
+            except Exception:
+                pass
+        # Delete the backend-ns namespace — it is not a maydaylabs-* namespace so
+        # _assert_maydaylabs_ns cannot be used here; call k8s.delete_namespace directly.
+        try:
+            k8s.delete_namespace("backend-ns")
+        except Exception:
+            pass
+
     k8s.delete_namespace(session.namespace)
     await rate_limit.decrement(session.level, session.client_ip)
 
