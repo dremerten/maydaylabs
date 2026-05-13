@@ -21,6 +21,14 @@ function buildLines(playerName: string): { text: string; color: string }[] {
   { text: "     That's your kubectl shell. Use it to diagnose and", color: "text-gray-400" },
   { text: "     fix the broken cluster.", color: "text-gray-400" },
   { text: " ", color: "" },
+  { text: "  ⎈  Each tab opens a UNIQUE k8s namespace sandbox.", color: "text-cyber-violet" },
+  { text: "     Closing either tab TERMINATES the namespace.", color: "text-cyber-red/80" },
+  { text: " ", color: "" },
+  { text: "  💡  k9s is pre-installed in your Helm Station.", color: "text-cyber-cyan" },
+  { text: "     TIP: Duplicate the shell tab — use one for kubectl", color: "text-gray-400" },
+  { text: "     commands and one for k9s. Both share the same", color: "text-gray-400" },
+  { text: "     namespace, but closing EITHER tab ends the session.", color: "text-cyber-red/80" },
+  { text: " ", color: "" },
   { text: "  MISSION PARAMETERS:", color: "text-cyber-fg/60" },
   { text: "    Session TTL .............. 15 minutes", color: "text-gray-400" },
   { text: "    Max concurrent ops ...... 20 operators", color: "text-gray-400" },
@@ -30,7 +38,7 @@ function buildLines(playerName: string): { text: string; color: string }[] {
   { text: "  Select a level from the sidebar.", color: "text-cyber-fg" },
   { text: "  Click  ▶ Launch Environment  to begin.", color: "text-cyber-fg" },
   { text: " ", color: "" },
-  { text: "  Good luck, operator. The cluster is counting on you.", color: "text-cyber-cyan/80" },
+  { text: `  Good luck, ${name || "operator"}. The cluster is counting on you.`, color: "text-cyber-cyan/80" },
   { text: " ", color: "" },
   { text: "────────────────────────────────────────────────────────", color: "text-cyber-cyan/40" },
   ];
@@ -90,7 +98,7 @@ export default function MissionTerminal({ playerName = "" }: { playerName?: stri
         <span className="ml-2 font-mono text-[13px] text-cyber-muted">kubectl — mission-control</span>
       </div>
 
-      <div className="p-4 font-mono text-[17px] leading-relaxed flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      <div className="p-4 font-mono text-[11px] leading-relaxed flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         {/* prompt + typed command */}
         <div className="flex flex-wrap mb-1">
           <span className="text-cyber-cyan shrink-0">operator@k8squest</span>

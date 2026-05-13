@@ -126,6 +126,7 @@ export default function PlayPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isCapacityError, setIsCapacityError] = useState(false);
   const [storedProgress, setStoredProgress] = useState<ProgressData | null>(null);
+  const [progressError, setProgressError] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -256,13 +257,15 @@ export default function PlayPage() {
       const a = document.createElement("a");
       a.href = url;
       a.download = "progress.json";
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
-      // Refresh localStorage + state so the panel updates immediately
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
       localStorage.setItem(PROGRESS_KEY, JSON.stringify(data));
       setStoredProgress(data as unknown as ProgressData);
     } catch {
-      /* progress not available yet — user hasn't completed a level this session */
+      setProgressError(true);
+      setTimeout(() => setProgressError(false), 3000);
     }
   }, [session]);
 
@@ -288,13 +291,18 @@ export default function PlayPage() {
           <CountdownTimer expiresAt={session.expires_at} onExpired={handleExpired} />
         )}
         {session && uiStatus === "ready" && (
-          <button
-            onClick={handleDownloadProgress}
-            title="Download progress.json — upload on the home page to resume next time"
-            className="font-mono text-xs text-cyber-cyan border border-cyber-cyan/30 rounded px-3 py-1.5 hover:bg-cyber-cyan/10 transition-colors"
-          >
-            ↓ Progress
-          </button>
+          <>
+            <button
+              onClick={handleDownloadProgress}
+              title="Download progress.json — upload on the home page to resume next time"
+              className="font-mono text-xs text-cyber-cyan border border-cyber-cyan/30 rounded px-3 py-1.5 hover:bg-cyber-cyan/10 transition-colors"
+            >
+              ↓ Progress
+            </button>
+            {progressError && (
+              <span className="font-mono text-[10px] text-cyber-red">No progress yet — complete a level first</span>
+            )}
+          </>
         )}
         {session && (
           <button
@@ -399,16 +407,6 @@ export default function PlayPage() {
                   <span className="text-cyber-muted/50 hidden sm:inline truncate">
                     {session.session_id}
                   </span>
-                  <div className="ml-auto shrink-0">
-                    <a
-                      href={shellUrl(session.session_id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-cyber-violet border border-cyber-violet/30 rounded px-2.5 py-1 hover:bg-cyber-violet/10 transition-colors"
-                    >
-                      ⚓ Helm Station ↗
-                    </a>
-                  </div>
                 </div>
 
                 {/* Two-terminal explainer */}
