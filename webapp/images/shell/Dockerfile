@@ -22,27 +22,35 @@ RUN curl -sSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}
     -o /ttyd \
     && chmod +x /ttyd
 
+# kubectl-neat — strips noise from kubectl output, helps create clean YAML
+ARG KUBECTL_NEAT_VERSION=v2.0.4
+RUN curl -sSL "https://github.com/itaysk/kubectl-neat/releases/download/${KUBECTL_NEAT_VERSION}/kubectl-neat_linux_amd64.tar.gz" \
+    | tar xzf - -C /tmp kubectl-neat \
+    && mv /tmp/kubectl-neat /kubectl-neat \
+    && chmod +x /kubectl-neat
+
+
 # Stage 2: lean runtime image — non-root, read-only-safe
 FROM alpine:3.21
 
-COPY --from=downloader /kubectl /usr/local/bin/kubectl
-COPY --from=downloader /k9s    /usr/local/bin/k9s
-COPY --from=downloader /ttyd   /usr/local/bin/ttyd
+COPY --from=downloader /kubectl       /usr/local/bin/kubectl
+COPY --from=downloader /k9s           /usr/local/bin/k9s
+COPY --from=downloader /ttyd          /usr/local/bin/ttyd
+COPY --from=downloader /kubectl-neat  /usr/local/bin/kubectl-neat
 
 RUN apk add --no-cache \
     bash \
     curl \
-    wget \
     jq \
     ca-certificates \
     bind-tools \
     iputils \
     vim \
-    docker-cli \
-    python3 \
-    && addgroup -g 975 docker \
-    && adduser -u 1000 -D -s /bin/bash k8squest \
-    && addgroup k8squest docker
+    && adduser -u 1000 -D -s /bin/bash k8squest
+
+RUN chmod 700 /root && \
+    chmod 711 /home && \
+    chmod o-rx /etc/shadow /etc/crontabs 2>/dev/null || true
 
 # Store entrypoint and bashrc template outside /home/k8squest so an emptyDir
 # overlay on the home directory (for write access) doesn't hide them.
