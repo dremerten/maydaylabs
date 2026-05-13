@@ -89,6 +89,19 @@ def create_pod(namespace: str, pod: client.V1Pod) -> None:
     core().create_namespaced_pod(namespace=namespace, body=pod)
 
 
+def wait_for_pod_deleted(namespace: str, name: str, timeout: int = 30) -> None:
+    """Poll until the named pod is fully gone (404). Returns immediately if already absent."""
+    for _ in range(timeout):
+        try:
+            core().read_namespaced_pod(name=name, namespace=namespace)
+        except ApiException as e:
+            if e.status == 404:
+                return
+            raise
+        time.sleep(1)
+    raise RuntimeError(f"Pod '{namespace}/{name}' still Terminating after {timeout}s")
+
+
 def pod_exists(namespace: str, name: str) -> bool:
     try:
         core().read_namespaced_pod(name=name, namespace=namespace)

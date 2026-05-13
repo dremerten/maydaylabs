@@ -113,6 +113,9 @@ async def get_session_progress(session_id: str):
     except Exception:
         raise HTTPException(status_code=404, detail="Progress not available yet")
 
+    if not content or not content.strip():
+        raise HTTPException(status_code=404, detail="No progress yet — complete a level first")
+
     return Response(content=content, media_type="application/json")
 
 
