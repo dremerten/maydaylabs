@@ -23,10 +23,31 @@ if [ -f "${SA_DIR}/token" ]; then
 
   kubectl config --kubeconfig="${KUBECONFIG_PATH}" use-context default >/dev/null 2>&1
   export KUBECONFIG="${KUBECONFIG_PATH}"
+
+  # ~/.kube/config symlink so k9s and standard tools find the kubeconfig
+  mkdir -p /home/k8squest/.kube
+  ln -sf /tmp/kubeconfig /home/k8squest/.kube/config
+
+  # Seed empty plugins.yaml so k9s doesn't error on startup
+  mkdir -p /home/k8squest/.k9s
+  printf 'plugins: {}\n' > /home/k8squest/.k9s/plugins.yaml
+
+  # Lock k9s active namespace to the session namespace
+  mkdir -p /home/k8squest/.k9s/clusters/in-cluster/default
+  cat > /home/k8squest/.k9s/clusters/in-cluster/default/config.yaml <<EOF
+k9s:
+  namespace:
+    active: ${NAMESPACE:-default}
+    favorites:
+    - ${NAMESPACE:-default}
+EOF
 fi
 
-# Home dir is a writable emptyDir — seed .bashrc from the baked template
+# Home dir is a writable emptyDir — seed .bashrc and .bash_profile from baked templates.
+# bash -l (login shell) reads .bash_profile, not .bashrc directly — .bash_profile must
+# source .bashrc so the banner, PS1, and aliases are active from the first prompt.
 [ ! -f /home/k8squest/.bashrc ] && cp /etc/k8squest/bashrc /home/k8squest/.bashrc
+[ ! -f /home/k8squest/.bash_profile ] && printf '[[ -f ~/.bashrc ]] && . ~/.bashrc\n' > /home/k8squest/.bash_profile
 
 export TERM=xterm-256color
 export HISTFILE=/home/k8squest/.bash_history
@@ -38,6 +59,8 @@ export XDG_CACHE_HOME=/home/k8squest/.cache
 # ttyd base-path must match the proxy route the backend exposes:
 #   https://<host>/shell/<session_id>/
 TTYD_BASE="/shell/${SESSION_ID:-local}/"
+
+cd /home/k8squest
 
 exec ttyd \
   --port 7681 \

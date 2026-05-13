@@ -18,6 +18,23 @@ alias kl='kubectl logs'
 alias kd='kubectl describe'
 alias ke='kubectl exec -it'
 
+# kubectl shortcuts banner — shown on every new shell
+_k8squest_banner() {
+  printf '\n\e[0;36m  ⎈  kubectl shortcuts\e[0m\n'
+  printf '\e[0;34m  ──────────────────────────────────────────────\e[0m\n'
+  printf '  \e[1;33mk\e[0m      kubectl\n'
+  printf '  \e[1;33mkgp\e[0m    get pods -o wide\n'
+  printf '  \e[1;33mkgs\e[0m    get services\n'
+  printf '  \e[1;33mkgd\e[0m    get deployments\n'
+  printf '  \e[1;33mkge\e[0m    get events --sort-by=.lastTimestamp\n'
+  printf '  \e[1;33mkl\e[0m     kubectl logs\n'
+  printf '  \e[1;33mkd\e[0m     kubectl describe\n'
+  printf '  \e[1;33mke\e[0m     kubectl exec -it\n'
+  printf '\e[0;34m  ──────────────────────────────────────────────\e[0m\n'
+  printf '  \e[0;37mk9s  → interactive cluster dashboard\e[0m\n\n'
+}
+_k8squest_banner
+
 # Switch namespace and update prompt
 kns() {
     if [ -n "$1" ]; then
