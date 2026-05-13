@@ -36,7 +36,7 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
     verbs: ["bind"]
-    resourceNames: ["maydaylabs-backend-session", "maydaylabs-engine", "maydaylabs-player-viewer"]
+    resourceNames: ["maydaylabs-backend-session", "maydaylabs-engine", "maydaylabs-player-viewer", "maydaylabs-backend-default-ns", "maydaylabs-player-default-ns"]
   # PersistentVolumes are cluster-scoped — cannot be granted via namespaced RoleBinding
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -98,6 +98,9 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
@@ -112,7 +115,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["storageclasses", "persistentvolumes"]
     verbs: ["get", "list", "watch"]
@@ -121,4 +124,40 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# ClusterRole: backend SA access for levels that create resources in non-session namespaces.
+# Used for level-10 (resources in default) and level-27 (resources in backend-ns).
+# Bound via namespaced RoleBindings only — never as a ClusterRoleBinding.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maydaylabs-backend-default-ns
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status", "services", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# ClusterRole: player SA access for levels that require operations in non-session namespaces.
+# Used for level-10 (move resources from default) and level-27 (access to backend-ns).
+# Bound via namespaced RoleBindings only — never as a ClusterRoleBinding.
+# Covers all resource types that `kubectl get all` expands to — prevents noisy 403 spam
+# when players run `kubectl get all -n default` as part of the level-10 diagnosis steps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maydaylabs-player-default-ns
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status", "services", "endpoints", "events",
+                "replicationcontrollers", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
