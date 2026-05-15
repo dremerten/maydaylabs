@@ -11,7 +11,7 @@ spec:
     namespace: nginx-gateway
     sectionName: maydaylabs
   hostnames:
-  - maydaylabs.dremer10.com
+  - ${APP_DOMAIN}
   rules:
   - matches:
     - path:
@@ -48,7 +48,7 @@ spec:
     namespace: nginx-gateway
     sectionName: acme-http
   hostnames:
-  - maydaylabs.dremer10.com
+  - ${APP_DOMAIN}
   rules:
   - matches:
     - path:

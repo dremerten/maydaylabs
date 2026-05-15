@@ -6,7 +6,7 @@
 # Instead use the JSON patch command shown in .staging_deployment.md:
 #
 #   kubectl patch gateway global-gateway -n nginx-gateway --type=json \
-#     -p='[{"op":"add","path":"/spec/listeners/-","value":{"name":"maydaylabs","hostname":"maydaylabs.dremer10.com","port":443,"protocol":"HTTPS","tls":{"mode":"Terminate","certificateRefs":[{"name":"maydaylabs-tls","kind":"Secret"}]},"allowedRoutes":{"namespaces":{"from":"All"}}}}]'
+#     -p='[{"op":"add","path":"/spec/listeners/-","value":{"name":"maydaylabs","hostname":"${APP_DOMAIN}","port":443,"protocol":"HTTPS","tls":{"mode":"Terminate","certificateRefs":[{"name":"maydaylabs-tls","kind":"Secret"}]},"allowedRoutes":{"namespaces":{"from":"All"}}}}]'
 #
 # This file is kept as a reference for the listener spec.
 # The idempotent helper that checks-before-adding is in .staging_deployment.md.
@@ -19,7 +19,7 @@ spec:
   gatewayClassName: nginx
   listeners:
   - name: maydaylabs
-    hostname: maydaylabs.dremer10.com
+    hostname: ${APP_DOMAIN}
     port: 443
     protocol: HTTPS
     tls:

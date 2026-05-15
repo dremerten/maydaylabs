@@ -28,13 +28,13 @@ spec:
             - containerPort: 8000
           env:
             - name: K8SQUEST_REDIS_URL
-              value: "redis://redis:6379/0"
+              value: "${K8SQUEST_REDIS_URL}"
             - name: K8SQUEST_ENGINE_IMAGE
-              value: "${REGISTRY}/maydaylabs-engine:latest"
+              value: "${REGISTRY}/maydaylabs-engine:${TAG}"
             - name: K8SQUEST_SHELL_IMAGE
-              value: "${REGISTRY}/maydaylabs-shell:latest"
+              value: "${REGISTRY}/maydaylabs-shell:${TAG}"
             - name: K8SQUEST_WORLDS_PATH
-              value: "/app/worlds"
+              value: "${K8SQUEST_WORLDS_PATH}"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
