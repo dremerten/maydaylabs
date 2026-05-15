@@ -37,6 +37,8 @@ Thumbs.db
 # Next.js build output
 webapp/frontend/.next/
 
+.env
+
 # Kubernetes
 kubeconfig
 *.kubeconfig
