@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     shell_image: str = "maydaylabs-shell:latest"
     engine_sa: str = "maydaylabs-engine"
     kube_context: str = "kind-k8squest"
-    app_url: str = "https://maydaylabs.dremer10.com"
+    app_url: str = ""
+    cors_origins: str = ""
     max_sessions_per_user: int = 1
     # Hard limits
     max_sessions_total: int = 20

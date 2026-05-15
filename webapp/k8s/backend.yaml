@@ -52,6 +52,8 @@ spec:
                   key: SESSION_SECRET_KEY
             - name: K8SQUEST_APP_URL
               value: "${APP_URL}"
+            - name: K8SQUEST_CORS_ORIGINS
+              value: "${CORS_ORIGINS}"
             - name: K8SQUEST_MAX_SESSIONS_PER_USER
               value: "1"
           securityContext:
