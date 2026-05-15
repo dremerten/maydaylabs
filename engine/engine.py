@@ -1120,6 +1120,24 @@ Look for "2/2" ready replicas!
                         self.progress["completed_levels"].append(level_name)
                     self.save_progress()
 
+                    # Best-effort progress checkpoint to backend
+                    _api_url = os.environ.get("K8SQUEST_API_URL", "")
+                    _session_id = os.environ.get("K8SQUEST_SESSION_ID", "")
+                    if _api_url and _session_id:
+                        try:
+                            import urllib.request as _urllib_req
+                            import json as _json_mod
+                            _data = _json_mod.dumps(self.progress).encode()
+                            _req = _urllib_req.Request(
+                                f"{_api_url}/api/sessions/{_session_id}/checkpoint",
+                                data=_data,
+                                headers={"Content-Type": "application/json"},
+                                method="POST",
+                            )
+                            _urllib_req.urlopen(_req, timeout=5)
+                        except Exception:
+                            pass  # best-effort — never block the normal exit
+
                     if not RETRO_UI_ENABLED:
                         console.print(
                             f"\n[bold yellow]🌟 +{xp_earned} XP! Total: {self.progress['total_xp']} XP[/bold yellow]"
