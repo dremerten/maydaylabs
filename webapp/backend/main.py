@@ -3,13 +3,15 @@ import json
 import logging
 
 import httpx
+import redis.asyncio as aioredis
 import websockets as ws_lib
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 import k8s_client as k8s
 import session as session_manager
+from auth import router as auth_router, get_current_user
 from levels import get_level, get_levels
 from models import SessionCreate, SessionStatus
 from config import settings
@@ -21,9 +23,23 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="K8sQuest API", version="1.0.0")
 
+app.include_router(auth_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await app.state.redis.aclose()
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://maydaylabs.dremer10.com", "http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -58,7 +74,7 @@ async def list_levels():
 
 
 @app.post("/api/sessions", response_model=SessionStatus, status_code=201)
-async def create_session(body: SessionCreate, request: Request):
+async def create_session(body: SessionCreate, request: Request, user: dict = Depends(get_current_user)):
     level = get_level(body.level)
     if level is None:
         raise HTTPException(status_code=422, detail=f"Unknown level: {body.level}")
@@ -72,7 +88,7 @@ async def create_session(body: SessionCreate, request: Request):
         raise HTTPException(status_code=422, detail="Progress data too large")
 
     try:
-        sess = await session_manager.create_session(body.level, _client_ip(request), body.player_name, body.progress)
+        sess = await session_manager.create_session(body.level, user["sub"], body.player_name, body.progress)
     except RateLimitExceeded as e:
         return JSONResponse(
             status_code=429,
@@ -125,6 +141,17 @@ async def delete_session(session_id: str):
     if sess is None:
         raise HTTPException(status_code=404, detail="Session not found or expired")
     await session_manager.delete_session(session_id)
+
+
+@app.post("/api/sessions/{session_id}/checkpoint")
+async def checkpoint_progress(session_id: str, progress: dict, request: Request):
+    sess = session_manager.get_session(session_id)
+    if not sess or not sess.user_sub:
+        raise HTTPException(status_code=404, detail="Session not found")
+    await request.app.state.redis.set(
+        f"progress:{sess.user_sub}", json.dumps(progress)
+    )
+    return {"ok": True}
 
 
 # ── WebSockets (engine terminal — xterm.js relay) ─────────────────────────────

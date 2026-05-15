@@ -32,3 +32,4 @@ class SessionStatus(BaseModel):
     expires_at: datetime
     created_at: datetime
     client_ip: str = Field(default="", exclude=True)  # stored for accurate rate-limit decrement, never serialized
+    user_sub: str = Field(default="", exclude=True)  # owner's Google sub, for progress persistence

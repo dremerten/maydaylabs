@@ -45,6 +45,16 @@ spec:
     - ports:
         - protocol: TCP
           port: 6443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: maydaylabs-system
+          podSelector:
+            matchLabels:
+              app: maydaylabs-api
+      ports:
+        - protocol: TCP
+          port: 8000
 """
 
 # In-memory session map: session_id → SessionStatus
@@ -107,6 +117,11 @@ def _build_engine_pod(session_id: str, ns: str, level_id: str, progress_json: st
         client.V1EnvVar(name="K8SQUEST_WEB", value="true"),
         client.V1EnvVar(name="K8SQUEST_LEVEL", value=level_id),
         client.V1EnvVar(name="NAMESPACE", value=ns),
+        client.V1EnvVar(name="K8SQUEST_SESSION_ID", value=session_id),
+        client.V1EnvVar(
+            name="K8SQUEST_API_URL",
+            value="http://maydaylabs-api.maydaylabs-system.svc.cluster.local:8000",
+        ),
     ]
     if progress_json:
         env_vars.append(client.V1EnvVar(name="K8SQUEST_INITIAL_PROGRESS", value=progress_json))
@@ -465,14 +480,32 @@ def _bind_player_to_extra_namespace(session_id: str, player_sa_ns: str, target_n
     k8s.rbac().create_namespaced_role_binding(namespace=target_namespace, body=binding)
 
 
-async def create_session(level_id: str, client_ip: str, player_name: str = "explorer", progress: dict | None = None) -> SessionStatus:
+async def create_session(level_id: str, user_sub: str, player_name: str = "explorer", progress: dict | None = None) -> SessionStatus:
+    # Seed player_name so the engine skips the interactive CLI name prompt.
+    if progress is None:
+        progress = {
+            "total_xp": 0,
+            "completed_levels": [],
+            "current_world": "world-1-basics",
+            "current_level": None,
+            "player_name": player_name,
+        }
+    elif progress.get("player_name", "Padawan") == "Padawan":
+        progress = {**progress, "player_name": player_name}
+
     session_id = uuid.uuid4().hex[:8]
     ns = _make_namespace(session_id, player_name, level_id)
     now = datetime.now(timezone.utc)
     expires_at = datetime.fromtimestamp(now.timestamp() + settings.session_ttl_seconds, tz=timezone.utc)
 
-    # Check + increment rate limit counters
-    await rate_limit.check_and_increment(level_id, client_ip)
+    # Check per-user session limit
+    user_active = sum(1 for s in _sessions.values() if s.user_sub == user_sub)
+    if user_active >= settings.max_sessions_per_user:
+        from rate_limit import RateLimitExceeded
+        raise RateLimitExceeded(f"You already have {settings.max_sessions_per_user} active session(s). Close it first.")
+
+    # Check + increment rate limit counters (total and per-level only)
+    await rate_limit.check_and_increment(level_id, user_sub)
 
     try:
         # Create namespace with PSS baseline enforcement
@@ -563,7 +596,7 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
         # For level-27, also clean up the pre-created backend-ns
         if level_id == "level-27-crossnamespace":
             k8s.delete_namespace("backend-ns")
-        await rate_limit.decrement(level_id, client_ip)
+        await rate_limit.decrement(level_id, user_sub)
         raise
 
     session = SessionStatus(
@@ -573,7 +606,7 @@ async def create_session(level_id: str, client_ip: str, player_name: str = "expl
         status="provisioning",
         expires_at=expires_at,
         created_at=now,
-        client_ip=client_ip,
+        user_sub=user_sub,
     )
     _sessions[session_id] = session
 
@@ -634,7 +667,7 @@ async def delete_session(session_id: str) -> None:
             pass
 
     k8s.delete_namespace(session.namespace)
-    await rate_limit.decrement(session.level, session.client_ip)
+    await rate_limit.decrement(session.level, session.user_sub)
 
 
 def get_session(session_id: str) -> SessionStatus | None:
