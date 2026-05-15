@@ -1,11 +1,11 @@
 # Builder: compile C extensions (uvloop, httptools) then discard build tools
-FROM python:3.14-alpine3.21 AS builder
+FROM python:3.14.5-alpine3.23 AS builder
 RUN apk upgrade --no-cache && apk add --no-cache gcc musl-dev libffi-dev
 RUN pip install --no-cache-dir --upgrade pip wheel
 COPY webapp/backend/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-FROM python:3.14-alpine3.21
+FROM python:3.14.5-alpine3.23
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 
 COPY --from=builder /install /usr/local
