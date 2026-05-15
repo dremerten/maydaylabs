@@ -24,6 +24,23 @@ fi
 KUBECONFIG="${HOME}/.kube/full-config"
 export KUBECONFIG NAMESPACE
 
+# ── Ensure Docker is running ──────────────────────────────────────────────────
+if ! docker info &>/dev/null 2>&1; then
+  echo "Docker daemon not running — starting ..."
+  sudo systemctl start docker
+  until docker info &>/dev/null 2>&1; do sleep 2; done
+  echo "✓ Docker daemon ready"
+fi
+
+# ── Ensure k3s is running ─────────────────────────────────────────────────────
+if ! sudo systemctl is-active --quiet k3s; then
+  echo "k3s not running — starting ..."
+  sudo systemctl start k3s
+  echo "  waiting for k3s API ..."
+  until kubectl get nodes &>/dev/null 2>&1; do sleep 2; done
+  echo "✓ k3s ready"
+fi
+
 # Hardcoded context guard — never runs against staging or production
 CONTEXT=$(kubectl config current-context)
 if [[ "$CONTEXT" != "k3s-k8squest" ]]; then
@@ -94,17 +111,13 @@ done
 # ── Secrets ───────────────────────────────────────────────────────────────────
 echo ""
 echo "── Ensuring secrets ─────────────────────────────────────────────────────"
-if ! kubectl get secret google-oauth -n "$NAMESPACE" &>/dev/null; then
-  echo "  creating google-oauth secret from .env ..."
-  kubectl create secret generic google-oauth \
-    --from-literal=GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}" \
-    --from-literal=GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET}" \
-    --from-literal=SESSION_SECRET_KEY="${SESSION_SECRET_KEY}" \
-    -n "$NAMESPACE"
-  echo "  ✓ google-oauth secret created"
-else
-  echo "  ✓ google-oauth secret already exists"
-fi
+kubectl create secret generic google-oauth \
+  --from-literal=GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}" \
+  --from-literal=GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET}" \
+  --from-literal=SESSION_SECRET_KEY="${SESSION_SECRET_KEY}" \
+  -n "$NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
+echo "  ✓ google-oauth secret synced from .env"
 
 # ── Apply manifests ───────────────────────────────────────────────────────────
 echo ""
@@ -116,6 +129,7 @@ envsubst < webapp/k8s/backend.yaml  | kubectl apply -f - -n "$NAMESPACE"
 envsubst < webapp/k8s/frontend.yaml | kubectl apply -f - -n "$NAMESPACE"
 envsubst < webapp/k8s/redis.yaml    | kubectl apply -f - -n "$NAMESPACE"
 
+kubectl rollout status  deployment/redis               --timeout=120s -n "$NAMESPACE"
 kubectl rollout restart deployment/maydaylabs-api deployment/maydaylabs-frontend -n "$NAMESPACE"
 kubectl rollout status  deployment/maydaylabs-api      --timeout=120s -n "$NAMESPACE"
 kubectl rollout status  deployment/maydaylabs-frontend --timeout=120s -n "$NAMESPACE"
