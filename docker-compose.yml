@@ -9,9 +9,9 @@ services:
       dockerfile: webapp/images/backend/Dockerfile
     restart: unless-stopped
     environment:
-      K8SQUEST_REDIS_URL: redis://redis:6379/0
-      K8SQUEST_ENGINE_IMAGE: docker.io/dremer10/maydaylabs-engine:latest
-      K8SQUEST_SHELL_IMAGE: docker.io/dremer10/maydaylabs-shell:latest
+      K8SQUEST_REDIS_URL: ${K8SQUEST_REDIS_URL}
+      K8SQUEST_ENGINE_IMAGE: ${REGISTRY}/maydaylabs-engine:latest
+      K8SQUEST_SHELL_IMAGE: ${REGISTRY}/maydaylabs-shell:latest
       K8SQUEST_KUBE_CONTEXT: k3s-k8squest
       KUBECONFIG: /home/k8squest/.kube/config
     volumes:
@@ -23,10 +23,14 @@ services:
     build:
       context: .
       dockerfile: webapp/images/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
     restart: unless-stopped
 
   proxy:
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine3.23
     restart: unless-stopped
     ports:
       - "3000:80"
