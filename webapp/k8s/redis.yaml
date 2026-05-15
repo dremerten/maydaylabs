@@ -20,7 +20,7 @@ spec:
       containers:
         - name: redis
           image: ${REDIS_IMAGE}
-          command: ["redis-server", "--save", "", "--appendonly", "no"]
+          command: ["redis-server", "--save", "", "--appendonly", "yes"]
           ports:
             - containerPort: 6379
           resources:
@@ -38,9 +38,27 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: data
+              mountPath: /data
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: maydaylabs-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
