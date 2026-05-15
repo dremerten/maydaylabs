@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   fetchLevels,
@@ -19,8 +20,10 @@ import MissionTerminal from "@/components/MissionTerminal";
 import SessionStatusIndicator from "@/components/SessionStatus";
 import CountdownTimer from "@/components/CountdownTimer";
 import TerminalPanel from "@/components/TerminalPanel";
+import UserChip from "@/components/UserChip";
 import Link from "next/link";
 import type { ProgressData } from "@/lib/progress";
+import { useAuth } from "@/contexts/AuthContext";
 
 type UiStatus = "idle" | "provisioning" | "ready" | "expired" | "error";
 
@@ -118,6 +121,12 @@ const PLAYER_KEY = "k8squest_player_name";
 const PROGRESS_KEY = "k8squest_progress";
 
 export default function PlayPage() {
+  const router = useRouter();
+  const { user, progress: authProgress, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/");
+  }, [authLoading, user, router]);
   const [levels, setLevels] = useState<LevelInfo[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [playerName, setPlayerName] = useState<string>("");
@@ -139,6 +148,29 @@ export default function PlayPage() {
       if (raw) setStoredProgress(JSON.parse(raw) as ProgressData);
     } catch { /* ignore */ }
   }, []);
+
+  // Sync Redis progress (authoritative) into local state and localStorage cache
+  useEffect(() => {
+    if (authProgress) {
+      setStoredProgress(authProgress);
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(authProgress));
+      if (authProgress.player_name && authProgress.player_name !== "Padawan") {
+        setPlayerName(authProgress.player_name);
+        localStorage.setItem(PLAYER_KEY, authProgress.player_name);
+      }
+    }
+  }, [authProgress]);
+
+  // Pre-fill callsign from Google first name — only if user hasn't set one yet
+  const callsignInitialized = useRef(false);
+  useEffect(() => {
+    if (user && !callsignInitialized.current) {
+      callsignInitialized.current = true;
+      if (!localStorage.getItem(PLAYER_KEY)) {
+        setPlayerName(user.name.split(" ")[0]);
+      }
+    }
+  }, [user]);
 
   // Recover session from localStorage on mount
   useEffect(() => {
@@ -219,6 +251,11 @@ export default function PlayPage() {
       // Shell opens in a new tab; engine terminal is embedded in this page
       window.open(shellUrl(s.session_id), "_blank", "noopener");
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 401) {
+        // Session expired — redirect to home to re-authenticate
+        window.location.href = "/";
+        return;
+      }
       setUiStatus("error");
       const isCapacity = e instanceof ApiError && e.status === 429;
       setIsCapacityError(isCapacity);
@@ -288,6 +325,7 @@ export default function PlayPage() {
         </Link>
         <div className="flex-1" />
         <SessionStatusIndicator status={uiStatus} message={errorMsg ?? undefined} />
+        <UserChip />
         {session && (
           <CountdownTimer expiresAt={session.expires_at} onExpired={handleExpired} />
         )}
@@ -435,7 +473,7 @@ export default function PlayPage() {
 
                 {/* Progress panel */}
                 {storedProgress && levels.length > 0 && (
-                  <ProgressPanel progress={storedProgress} levels={levels} />
+                  <ProgressPanel progress={{ ...storedProgress, player_name: playerName || storedProgress.player_name }} levels={levels} />
                 )}
 
                 {/* Engine terminal fills remaining space */}
@@ -456,7 +494,7 @@ export default function PlayPage() {
                 className="flex-1 flex flex-col min-h-0"
               >
                 {storedProgress && levels.length > 0 && (
-                  <ProgressPanel progress={storedProgress} levels={levels} />
+                  <ProgressPanel progress={{ ...storedProgress, player_name: playerName || storedProgress.player_name }} levels={levels} />
                 )}
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden p-3">
                   {uiStatus === "expired" ? (
