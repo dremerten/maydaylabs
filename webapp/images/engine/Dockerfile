@@ -1,4 +1,4 @@
-FROM python:3.14-alpine3.21
+FROM python:3.14.5-alpine3.23
 
 RUN apk upgrade --no-cache && apk add --no-cache curl bash jq ca-certificates \
     && KUBECTL_VERSION=$(curl -sSL https://dl.k8s.io/release/stable.txt) \

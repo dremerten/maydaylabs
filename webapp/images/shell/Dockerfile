@@ -1,5 +1,5 @@
 # Stage 1: fetch binaries — isolated so download deps don't land in the final image
-FROM alpine:3.21 AS downloader
+FROM alpine:3.23 AS downloader
 
 RUN apk add --no-cache curl ca-certificates
 
@@ -31,7 +31,7 @@ RUN curl -sSL "https://github.com/itaysk/kubectl-neat/releases/download/${KUBECT
 
 
 # Stage 2: lean runtime image — non-root, read-only-safe
-FROM alpine:3.21
+FROM alpine:3.23
 
 COPY --from=downloader /kubectl       /usr/local/bin/kubectl
 COPY --from=downloader /k9s           /usr/local/bin/k9s
