@@ -22,7 +22,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ${REGISTRY}/maydaylabs-api:latest
+          image: ${REGISTRY}/maydaylabs-api:${TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -35,6 +35,25 @@ spec:
               value: "${REGISTRY}/maydaylabs-shell:${TAG}"
             - name: K8SQUEST_WORLDS_PATH
               value: "${K8SQUEST_WORLDS_PATH}"
+            - name: K8SQUEST_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: GOOGLE_CLIENT_ID
+            - name: K8SQUEST_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: GOOGLE_CLIENT_SECRET
+            - name: K8SQUEST_SESSION_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: SESSION_SECRET_KEY
+            - name: K8SQUEST_APP_URL
+              value: "${APP_URL}"
+            - name: K8SQUEST_MAX_SESSIONS_PER_USER
+              value: "1"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
