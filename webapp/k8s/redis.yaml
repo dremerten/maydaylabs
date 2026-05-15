@@ -19,7 +19,7 @@ spec:
         runAsUser: 999
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: ${REDIS_IMAGE}
           command: ["redis-server", "--save", "", "--appendonly", "no"]
           ports:
             - containerPort: 6379
