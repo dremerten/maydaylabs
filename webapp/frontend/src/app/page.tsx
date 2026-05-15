@@ -6,8 +6,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession, deleteSession, type SessionStatus } from "@/lib/api";
-import { parseProgressFile, type ProgressData } from "@/lib/progress";
 import CountdownTimer from "@/components/CountdownTimer";
+import { useAuth } from "@/contexts/AuthContext";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
+import UserChip from "@/components/UserChip";
+import ConfirmModal from "@/components/ConfirmModal";
+import type { ProgressData } from "@/lib/progress";
 
 const SESSION_KEY = "k8squest_session_id";
 const PLAYER_KEY = "k8squest_player_name";
@@ -141,38 +145,46 @@ function ProgressStats({ progress }: { progress: ProgressData }) {
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, progress, loading, clearProgress } = useAuth();
   const [flowState, setFlowState] = useState<FlowState>("choose");
   const [callsign, setCallsign] = useState("");
-  const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem(PLAYER_KEY);
     if (savedName) setCallsign(savedName);
-
-    const savedProgress = localStorage.getItem(PROGRESS_KEY);
-    if (savedProgress) {
-      try {
-        const p = JSON.parse(savedProgress) as ProgressData;
-        setProgress(p);
-        setFlowState("resume");
-      } catch {
-        localStorage.removeItem(PROGRESS_KEY);
-      }
-    }
   }, []);
 
+  // Seed callsign from Google name when user loads
+  useEffect(() => {
+    if (user && !callsign) {
+      setCallsign(user.name.split(" ")[0]);
+    }
+  }, [user, callsign]);
+
+  // Auto-switch to resume state if progress exists
+  useEffect(() => {
+    if (progress) {
+      setFlowState("resume");
+    }
+  }, [progress]);
+
   const handleNewMission = () => {
+    if (progress) {
+      setShowResetConfirm(true);
+    } else {
+      setFlowState("new");
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    setShowResetConfirm(false);
+    await clearProgress();
     setFlowState("new");
-    setProgress(null);
-    setUploadError(null);
   };
 
   const handleResume = () => {
     setFlowState("resume");
-    setUploadError(null);
   };
 
   const handleBegin = () => {
@@ -189,34 +201,6 @@ export default function HomePage() {
     router.push("/play");
   };
 
-  const processFile = async (file: File) => {
-    setUploadError(null);
-    try {
-      const p = await parseProgressFile(file);
-      setProgress(p);
-      localStorage.setItem(PROGRESS_KEY, JSON.stringify(p));
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Invalid progress file");
-      setProgress(null);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
-    e.target.value = "";
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = () => setIsDragging(false);
-
   return (
     <main className="relative min-h-screen grid-bg flex flex-col items-center justify-center px-4 overflow-hidden">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -224,6 +208,22 @@ export default function HomePage() {
         <div className="absolute bottom-1/4 right-1/4 w-[32rem] h-[32rem] rounded-full bg-cyber-violet/4 blur-3xl" />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyber-cyan/20 to-transparent" />
       </div>
+
+      {/* User chip — top right */}
+      <div className="fixed top-4 right-4 z-40">
+        <UserChip />
+      </div>
+
+      {/* Confirm reset modal */}
+      {showResetConfirm && progress && (
+        <ConfirmModal
+          title="Start New Journey?"
+          message={`Starting a new journey will erase your ${progress.completed_levels.length} completed levels and ${progress.total_xp} XP. Are you sure?`}
+          confirmLabel="Reset & Start Fresh"
+          onConfirm={handleConfirmReset}
+          onCancel={() => setShowResetConfirm(false)}
+        />
+      )}
 
       {/* Hero */}
       <motion.div
@@ -308,149 +308,137 @@ export default function HomePage() {
         transition={{ delay: 1.0, duration: 0.4 }}
         className="w-full max-w-lg"
       >
-        <AnimatePresence mode="wait">
+        {/* Auth loading */}
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="font-mono text-xs text-cyber-muted animate-pulse">Loading…</div>
+          </div>
+        )}
 
-          {/* Choose path */}
-          {flowState === "choose" && (
-            <motion.div
-              key="choose"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="grid grid-cols-2 gap-4"
-            >
-              {/* New Journey — red alarm pulse */}
-              <button
-                onClick={handleNewMission}
-                className="alarm-pulse relative overflow-hidden rounded-xl p-6 text-center bg-cyber-red/10 border-2 border-cyber-red/70 hover:bg-cyber-red/20 transition-colors"
+        {/* Not authenticated — show sign-in button */}
+        {!loading && !user && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className="font-mono text-sm text-cyber-muted">Sign in to start your journey</p>
+            <GoogleSignInButton />
+          </div>
+        )}
+
+        {/* Authenticated — show mission flow */}
+        {!loading && user && (
+          <AnimatePresence mode="wait">
+
+            {/* Choose path */}
+            {flowState === "choose" && (
+              <motion.div
+                key="choose"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-2 gap-4"
               >
-                <div className="text-3xl mb-3">⎈</div>
-                <div className="font-mono text-sm font-bold text-cyber-red mb-1 tracking-wide">New Journey</div>
-                <div className="font-mono text-[11px] text-cyber-fg/60">Set your callsign and start from level 1</div>
-              </button>
+                {/* New Journey — red alarm pulse */}
+                <button
+                  onClick={handleNewMission}
+                  className="alarm-pulse relative overflow-hidden rounded-xl p-6 text-center bg-cyber-red/10 border-2 border-cyber-red/70 hover:bg-cyber-red/20 transition-colors"
+                >
+                  <div className="text-3xl mb-3">⎈</div>
+                  <div className="font-mono text-sm font-bold text-cyber-red mb-1 tracking-wide">New Journey</div>
+                  <div className="font-mono text-[11px] text-cyber-fg/60">Set your callsign and start from level 1</div>
+                </button>
 
-              {/* Resume Journey — white halo sparkle */}
-              <button
-                onClick={handleResume}
-                className="halo-glow relative overflow-hidden rounded-xl p-6 text-center glass border border-white/20 hover:bg-white/5 transition-colors"
+                {/* Resume Journey — white halo sparkle */}
+                <button
+                  onClick={handleResume}
+                  className="halo-glow relative overflow-hidden rounded-xl p-6 text-center glass border border-white/20 hover:bg-white/5 transition-colors"
+                >
+                  <span className="sparkle-1" style={{ top: '10%', right: '15%' }}>✦</span>
+                  <span className="sparkle-2" style={{ top: '60%', right: '8%' }}>✧</span>
+                  <span className="sparkle-3" style={{ top: '25%', right: '30%' }}>✦</span>
+                  <div className="text-3xl mb-3">⚓</div>
+                  <div className="font-mono text-sm font-bold text-white/90 mb-1 tracking-wide">Resume Journey</div>
+                  <div className="font-mono text-[11px] text-cyber-muted">Continue from your saved progress</div>
+                </button>
+              </motion.div>
+            )}
+
+            {/* New mission — callsign entry */}
+            {flowState === "new" && (
+              <motion.div
+                key="new"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="glass border border-cyber-cyan/25 rounded-xl p-6 space-y-4"
               >
-                <span className="sparkle-1" style={{ top: '10%', right: '15%' }}>✦</span>
-                <span className="sparkle-2" style={{ top: '60%', right: '8%' }}>✧</span>
-                <span className="sparkle-3" style={{ top: '25%', right: '30%' }}>✦</span>
-                <div className="text-3xl mb-3">⚓</div>
-                <div className="font-mono text-sm font-bold text-white/90 mb-1 tracking-wide">Resume Journey</div>
-                <div className="font-mono text-[11px] text-cyber-muted">Upload progress.json to continue</div>
-              </button>
-            </motion.div>
-          )}
-
-          {/* New mission — callsign entry */}
-          {flowState === "new" && (
-            <motion.div
-              key="new"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="glass border border-cyber-cyan/25 rounded-xl p-6 space-y-4"
-            >
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-widest text-cyber-muted mb-3">New Mission — Set Your Callsign</p>
-                <input
-                  type="text"
-                  value={callsign}
-                  onChange={(e) => setCallsign(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleBegin()}
-                  placeholder="e.g. Alpha, Kube-Rookie, Helm-Star…"
-                  maxLength={30}
-                  className="w-full px-3 py-2.5 bg-cyber-bg border border-cyber-border rounded font-mono text-sm text-cyber-fg placeholder:text-cyber-muted/40 focus:outline-none focus:border-cyber-cyan/50"
-                  autoFocus
-                />
-              </div>
-              <button
-                onClick={handleBegin}
-                className="w-full py-3 bg-cyber-cyan text-cyber-bg font-mono font-bold text-sm rounded-lg uppercase tracking-widest hover:bg-cyber-cyan/90 hover:shadow-cyan transition-all"
-              >
-                ▶ Begin Mission
-              </button>
-              <button
-                onClick={() => setFlowState("choose")}
-                className="w-full font-mono text-xs text-cyber-muted hover:text-cyber-fg transition-colors"
-              >
-                ← Back
-              </button>
-            </motion.div>
-          )}
-
-          {/* Resume journey — upload or show stats */}
-          {flowState === "resume" && (
-            <motion.div
-              key="resume"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="glass border border-cyber-violet/25 rounded-xl p-6 space-y-4"
-            >
-              <p className="font-mono text-[10px] uppercase tracking-widest text-cyber-muted">Resume Journey</p>
-
-              {progress ? (
-                <>
-                  <ProgressStats progress={progress} />
-                  <button
-                    onClick={handleContinue}
-                    className="w-full py-3 bg-cyber-violet text-cyber-bg font-mono font-bold text-sm rounded-lg uppercase tracking-widest hover:bg-cyber-violet/90 transition-all"
-                  >
-                    ⚓ Continue Journey
-                  </button>
-                  <button
-                    onClick={() => { setProgress(null); setUploadError(null); localStorage.removeItem(PROGRESS_KEY); }}
-                    className="w-full font-mono text-xs text-cyber-muted hover:text-cyber-fg transition-colors"
-                  >
-                    Upload different file
-                  </button>
-                </>
-              ) : (
-                <>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-cyber-muted mb-3">New Mission — Set Your Callsign</p>
                   <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={handleFileChange}
+                    type="text"
+                    value={callsign}
+                    onChange={(e) => setCallsign(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleBegin()}
+                    placeholder="e.g. Alpha, Kube-Rookie, Helm-Star…"
+                    maxLength={30}
+                    className="w-full px-3 py-2.5 bg-cyber-bg border border-cyber-border rounded font-mono text-sm text-cyber-fg placeholder:text-cyber-muted/40 focus:outline-none focus:border-cyber-cyan/50"
+                    autoFocus
                   />
-                  <div
-                    onClick={() => fileRef.current?.click()}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-                      isDragging
-                        ? "border-cyber-violet bg-cyber-violet/10"
-                        : "border-cyber-border hover:border-cyber-violet/50 hover:bg-cyber-violet/5"
-                    }`}
-                  >
-                    <div className="text-2xl mb-2">📁</div>
-                    <p className="font-mono text-sm text-cyber-fg mb-1">Drop progress.json here</p>
-                    <p className="font-mono text-xs text-cyber-muted">or click to browse</p>
-                  </div>
-                  {uploadError && (
-                    <p className="font-mono text-xs text-cyber-red text-center">{uploadError}</p>
-                  )}
-                </>
-              )}
+                </div>
+                <button
+                  onClick={handleBegin}
+                  className="w-full py-3 bg-cyber-cyan text-cyber-bg font-mono font-bold text-sm rounded-lg uppercase tracking-widest hover:bg-cyber-cyan/90 hover:shadow-cyan transition-all"
+                >
+                  ▶ Begin Mission
+                </button>
+                <button
+                  onClick={() => setFlowState("choose")}
+                  className="w-full font-mono text-xs text-cyber-muted hover:text-cyber-fg transition-colors"
+                >
+                  ← Back
+                </button>
+              </motion.div>
+            )}
 
-              <button
-                onClick={() => { setFlowState("choose"); setUploadError(null); }}
-                className="w-full font-mono text-xs text-cyber-muted hover:text-cyber-fg transition-colors"
+            {/* Resume journey — show stats from AuthContext */}
+            {flowState === "resume" && (
+              <motion.div
+                key="resume"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="glass border border-cyber-violet/25 rounded-xl p-6 space-y-4"
               >
-                ← Back
-              </button>
-            </motion.div>
-          )}
+                <p className="font-mono text-[10px] uppercase tracking-widest text-cyber-muted">Resume Journey</p>
 
-        </AnimatePresence>
+                {progress ? (
+                  <>
+                    <ProgressStats progress={progress} />
+                    <button
+                      onClick={handleContinue}
+                      className="w-full py-3 bg-cyber-violet text-cyber-bg font-mono font-bold text-sm rounded-lg uppercase tracking-widest hover:bg-cyber-violet/90 transition-all"
+                    >
+                      ⚓ Continue Journey
+                    </button>
+                  </>
+                ) : (
+                  <p className="font-mono text-sm text-cyber-muted text-center py-4">
+                    No saved progress yet. Complete a level to save your progress.
+                  </p>
+                )}
+
+                <button
+                  onClick={() => setFlowState("choose")}
+                  className="w-full font-mono text-xs text-cyber-muted hover:text-cyber-fg transition-colors"
+                >
+                  ← Back
+                </button>
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        )}
       </motion.div>
 
       {/* Footer */}

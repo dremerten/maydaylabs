@@ -44,6 +44,7 @@ export async function createSession(
   const res = await fetch(`${BASE}/api/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({
       level: levelId,
       player_name: playerName?.trim() || "explorer",
