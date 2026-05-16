@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 
 import httpx
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from config import settings
 
 router = APIRouter()
+_audit = logging.getLogger("audit")
 
 COOKIE_NAME = "k8squest_session"
 SESSION_PREFIX = "auth_session:"
@@ -92,6 +94,8 @@ async def google_auth(body: GoogleAuthRequest, request: Request, response: Respo
     progress = json.loads(raw_progress) if raw_progress else None
 
     response.set_cookie(value=token, **_cookie_kwargs())
+    ip = (request.headers.get("X-Forwarded-For", "") or "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    _audit.info("LOGIN sub=%s email=%s ip=%s ua=%s", user["sub"], user["email"], ip, request.headers.get("User-Agent", ""))
     return {"user": user, "progress": progress}
 
 
