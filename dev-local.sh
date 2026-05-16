@@ -41,13 +41,13 @@ if ! sudo systemctl is-active --quiet k3s; then
   echo "✓ k3s ready"
 fi
 
-# Hardcoded context guard — never runs against staging or production
-CONTEXT=$(kubectl config current-context)
+# Always use the local k3s context — never runs against staging or production
+CONTEXT=$(kubectl config current-context 2>/dev/null || true)
 if [[ "$CONTEXT" != "k3s-k8squest" ]]; then
-  echo "ERROR: kubectl context is '$CONTEXT', expected 'k3s-k8squest'. Aborting."
-  exit 1
+  echo "  switching kubectl context from '${CONTEXT:-none}' → 'k3s-k8squest' ..."
+  kubectl config use-context k3s-k8squest
 fi
-echo "✓ kubectl context: $CONTEXT"
+echo "✓ kubectl context: k3s-k8squest"
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
 echo ""
