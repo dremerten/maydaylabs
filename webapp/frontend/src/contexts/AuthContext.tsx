@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { ProgressData } from "@/lib/progress";
+import { deleteSession } from "@/lib/api";
 
 interface User {
   sub: string;
@@ -45,6 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    const activeSessionId = localStorage.getItem("k8squest_session_id");
+    if (activeSessionId) {
+      await deleteSession(activeSessionId).catch(() => {});
+      localStorage.removeItem("k8squest_session_id");
+    }
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
       method: "POST",
       credentials: "include",
