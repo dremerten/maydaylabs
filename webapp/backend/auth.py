@@ -1,5 +1,4 @@
 import json
-import logging
 import secrets
 
 import httpx
@@ -8,10 +7,11 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import BaseModel
 
+import audit_log
 from config import settings
+from utils import get_client_ip
 
 router = APIRouter()
-_audit = logging.getLogger("audit")
 
 COOKIE_NAME = "k8squest_session"
 SESSION_PREFIX = "auth_session:"
@@ -94,8 +94,20 @@ async def google_auth(body: GoogleAuthRequest, request: Request, response: Respo
     progress = json.loads(raw_progress) if raw_progress else None
 
     response.set_cookie(value=token, **_cookie_kwargs())
-    ip = (request.headers.get("X-Forwarded-For", "") or "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
-    _audit.info("LOGIN sub=%s email=%s ip=%s ua=%s", user["sub"], user["email"], ip, request.headers.get("User-Agent", ""))
+    try:
+        audit_log.log_event(
+            "oauth_login",
+            user_sub=user["sub"],
+            user_email=user["email"],
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("User-Agent", ""),
+            oauth_client_id=settings.google_client_id,
+            granted_scopes=token_data.get("scope", "").split(),
+            refresh_token_issued="refresh_token" in token_data,
+            redirect_uri=body.redirect_uri,
+        )
+    except Exception:
+        pass
     return {"user": user, "progress": progress}
 
 
@@ -112,8 +124,44 @@ async def get_me(request: Request, user: dict = Depends(get_current_user)):
 async def logout(request: Request, response: Response):
     """Delete the Redis session and clear the cookie."""
     token = request.cookies.get(COOKIE_NAME)
+    user_sub = ""
+    user_email = ""
     if token:
         redis = request.app.state.redis
+        raw = await redis.get(f"{SESSION_PREFIX}{token}")
+        if raw:
+            session_data = json.loads(raw)
+            user_sub = session_data.get("sub", "")
+            user_email = session_data.get("email", "")
         await redis.delete(f"{SESSION_PREFIX}{token}")
     response.delete_cookie(COOKIE_NAME)
+    try:
+        audit_log.log_event(
+            "oauth_logout",
+            user_sub=user_sub,
+            user_email=user_email,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("User-Agent", ""),
+        )
+    except Exception:
+        pass
     return {"ok": True}
+
+
+@router.post("/api/auth/google/revocation")
+async def google_token_revocation(request: Request):
+    """
+    Stub for Google token revocation push notifications (Cross-Account Protection / RISC).
+    Requires enrollment at Google Cloud Console before this endpoint receives traffic.
+    """
+    body = await request.json()
+    try:
+        audit_log.log_event(
+            "oauth_token_revoked",
+            user_sub=body.get("sub", ""),
+            revocation_type=body.get("revocation_type", ""),
+            ip_address=get_client_ip(request),
+        )
+    except Exception:
+        pass
+    return Response(status_code=200)

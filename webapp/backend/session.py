@@ -61,6 +61,14 @@ spec:
 # Redis is used for rate limiting; this dict is the fast path for status lookups.
 _sessions: dict[str, SessionStatus] = {}
 
+# Module-level redis reference wired in at startup for TTL-expiry flush path.
+_redis = None
+
+
+def set_redis(redis_client) -> None:
+    global _redis
+    _redis = redis_client
+
 
 def _make_namespace(session_id: str, player_name: str, level_id: str) -> str:
     safe_name = re.sub(r'[^a-z0-9]+', '-', player_name.lower().strip())[:10].strip('-') or "player"
@@ -618,6 +626,23 @@ async def create_session(level_id: str, user_sub: str, player_name: str = "explo
 
 async def _expire_after(session_id: str, delay: int) -> None:
     await asyncio.sleep(delay)
+    # Flush engine progress to Redis before tearing down the session namespace.
+    # Uses the module-level _redis ref wired in by set_redis() at startup.
+    if _redis is not None:
+        sess = _sessions.get(session_id)
+        if sess is not None and sess.user_sub and sess.status == "ready":
+            try:
+                loop = asyncio.get_event_loop()
+                content = await loop.run_in_executor(
+                    None,
+                    lambda: k8s.exec_in_pod(sess.namespace, f"engine-{session_id}", ["cat", "/app/progress.json"]),
+                )
+                if content and content.strip():
+                    data = json.loads(content)
+                    if "completed_levels" in data and "total_xp" in data:
+                        await _redis.set(f"progress:{sess.user_sub}", json.dumps(data))
+            except Exception:
+                pass
     await delete_session(session_id)
 
 

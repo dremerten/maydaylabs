@@ -29,6 +29,7 @@ app.include_router(auth_router)
 @app.on_event("startup")
 async def startup_event():
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    session_manager.set_redis(app.state.redis)
 
 
 @app.on_event("shutdown")
@@ -45,12 +46,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 async def _wait_for_pod_ip(namespace: str, pod_name: str, timeout: int = 60) -> str | None:
@@ -136,11 +131,33 @@ async def get_session_progress(session_id: str):
     return Response(content=content, media_type="application/json")
 
 
+async def _flush_engine_progress(sess, redis) -> None:
+    if not sess.user_sub or sess.status != "ready":
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        content = await loop.run_in_executor(
+            None,
+            lambda: k8s.exec_in_pod(sess.namespace, f"engine-{sess.session_id}", ["cat", "/app/progress.json"]),
+        )
+    except Exception:
+        return
+    if not content or not content.strip():
+        return
+    try:
+        data = json.loads(content)
+        if "completed_levels" in data and "total_xp" in data:
+            await redis.set(f"progress:{sess.user_sub}", json.dumps(data))
+    except Exception:
+        return
+
+
 @app.delete("/api/sessions/{session_id}", status_code=204)
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, request: Request):
     sess = session_manager.get_session(session_id)
     if sess is None:
         raise HTTPException(status_code=404, detail="Session not found or expired")
+    await _flush_engine_progress(sess, request.app.state.redis)
     await session_manager.delete_session(session_id)
 
 
