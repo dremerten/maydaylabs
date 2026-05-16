@@ -319,7 +319,7 @@ export default function PlayPage() {
       </div>
 
       {/* Top bar */}
-      <header className="relative z-10 flex items-center gap-4 px-6 py-3 border-b border-cyber-border glass shrink-0">
+      <header className="relative z-50 flex items-center gap-4 px-6 py-3 border-b border-cyber-border glass shrink-0">
         <Link href="/" className="font-mono font-bold text-cyber-cyan text-sm tracking-widest hover:text-glow-cyan transition-all">
           K8SQUEST
         </Link>

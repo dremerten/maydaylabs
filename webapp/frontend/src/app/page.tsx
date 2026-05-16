@@ -162,12 +162,12 @@ export default function HomePage() {
     }
   }, [user, callsign]);
 
-  // Auto-switch to resume state if progress exists
+  // Auto-switch to resume state if progress exists, or new state if no progress
   useEffect(() => {
-    if (progress) {
-      setFlowState("resume");
+    if (!loading) {
+      setFlowState(progress ? "resume" : "new");
     }
-  }, [progress]);
+  }, [progress, loading]);
 
   const handleNewMission = () => {
     if (progress) {
